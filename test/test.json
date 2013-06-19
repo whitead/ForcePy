@@ -1,4 +1,4 @@
 {
-    "structure" : "peptide.gro",
-    "trajectory" : "peptide.xtc"
+    "structure" : "test/peptide.gro",
+    "trajectory" : "test/peptide.xtc"
 }

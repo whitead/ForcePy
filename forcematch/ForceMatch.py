@@ -3,23 +3,21 @@ import numpy.linalg as ln
 import json
 from MDAnalysis import *
 
-
 class ForceMatch:
-"""Main force match class.
-
-"""
-
+    """Main force match class.
+    """
+    
     def __init__(self, input_file):
         self.ref_force_cats = []
         self.tar_force_cats = []
         with open(input_file, 'r') as f:
-            self.json = json.json.load(f)
-        _test_json(self.json)
+            self.json = json.load(f)
+        self._test_json(self.json)
         self.u = Universe(self.json["structure"], self.json["trajectory"])
                 
     def _test_json(self, json, required_keys = [("structure", "Toplogy file"), ("trajectory", "Trajectory File")]):
         for rk in required_keys:
-            if(!json.hasKey(rk[0])):
+            if(not json.has_key(rk[0])):
                 raise IOError("Error in input file, could not find %s" % rk[1])
 
     def add_tar_force_cat(self, *fcats):
@@ -99,8 +97,8 @@ class Force:
 #concrete class
 
 class Pairwise(ForceCategory):
-"""Pairwise force category. It handles constructing a neighbor-list at each time-step. 
-"""
+    """Pairwise force category. It handles constructing a neighbor-list at each time-step. 
+    """
     
     def __init__(self, cutoff=3):
         self.cutoff = cutoff                    
@@ -155,7 +153,7 @@ class PairwiseForce(Force):
     def calcForces(self, forces, u):
         if(not (grad is None) ):
             raise NotImplementedError("No gradient implementation for Lennard-Jones force")
-        positions = u.atoms.
+        positions = u.atoms.get_positions()
         nlist_accum = 0
         for i in u.atoms.numberOfAtoms():
             for j in self.nlist[nlist_accum:(nlist_accum + self.nlist_lengths[i])]:

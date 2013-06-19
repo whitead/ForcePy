@@ -15,9 +15,9 @@ class ForceMatch:
         with open(input_file, 'r') as f:
             self.json = json.json.load(f)
         _test_json(self.json)
-        self.u = Universe(self.json["topology"], self.json["trajectory"])
+        self.u = Universe(self.json["structure"], self.json["trajectory"])
                 
-    def _test_json(self, json, required_keys = [("topology", "Toplogy file"), ("trajectory", "Trajectory File")]):
+    def _test_json(self, json, required_keys = [("structure", "Toplogy file"), ("trajectory", "Trajectory File")]):
         for rk in required_keys:
             if(!json.hasKey(rk[0])):
                 raise IOError("Error in input file, could not find %s" % rk[1])
@@ -52,8 +52,9 @@ class ForceCategory:
    threebody forces, topology forces (bonds, angles, etc).
    """
     
-    def _addForce(self, force):
+    def addForce(self, force):
         self.forces.append(force)
+        force._init_hook(self)
 
     def calcForces(self, forces, u):
         """Calculate net forces in the given universe and stored in the passed numpy array. Assumes numpy is zeroed
@@ -87,7 +88,6 @@ class Force:
     def _init_hook(self, category):
         """Register the force with the category and keep a reference to it
         """
-        category._addForce(self)
         self.category = category
     
     def update(self, loss, u):
@@ -146,10 +146,10 @@ class PairwiseForce(Force):
     accept the scalar distance between the two particles as its first argument and any additional arguments
     it requires should be passed after the function.
     """
-    def __init__(self, category, f, *args):
-        self._init_hook(category)
+    def __init__(self, f, *args):
         self.call_force = f
         self.call_force_args = args
+
         
 
     def calcForces(self, forces, u):

@@ -2,6 +2,8 @@ import numpy as np
 import random
 import numpy.linalg as ln
 import json
+import matplotlib.pyplot as plt
+import matplotlib.mlab as mlab
 from MDAnalysis import *
 
 
@@ -85,7 +87,7 @@ class Force:
         self.sample = np.arange(0)
         #if this is an updatable force, set up stuff for it
         try:
-            self.lip = np.zeros( np.shape(self.w) )
+            self.lip = np.ones( np.shape(self.w) )
             self.grad = np.zeros( np.shape(self.w) )
             self.eta = 1
         except AttributeError:
@@ -94,11 +96,13 @@ class Force:
     
     def update(self, ref_forces, u):
         #sample particles and run updates on them
-        for i in random.sample(range(u.atoms.numberOfAtoms()), u.atoms.numberOfAtoms()):
+        for i in random.sample(range(u.atoms.numberOfAtoms()),u.atoms.numberOfAtoms()):
             g = self._calc_grad(i, ref_forces[i], u)
             self.lip += np.square(g)
+            print "%s" % self.w            
             self.w = self.w - self.eta / np.sqrt(self.lip) * g
-            
+            print "%s" % self.w            
+            self.plot("setp_%d.png" % i)
             
     
 
@@ -183,7 +187,7 @@ class PairwiseSpectralForce(Force):
         self.call_basis_args = args
         self.mesh = mesh
         #create weights 
-        self.w = np.ones(len(mesh) - 1)
+        self.w = np.zeros(len(mesh) - 1)
         self.temp_grad = np.asmatrix(np.zeros( (len(mesh) - 1, 3) ))
 
     
@@ -197,16 +201,29 @@ class PairwiseSpectralForce(Force):
                 force = self.w.dot(self.call_basis(d, self.mesh, *self.call_basis_args)) * (r / d)
                 print "Applying force %g to particles %d and %d" % (ln.norm(force), i, j)
                 forces[i] += force
-                nlist_accum += self.category.nlist_lengths[i]
+            nlist_accum += self.category.nlist_lengths[i]
+
+    def plot(self, outfile):
+        force = np.empty( len(self.mesh) - 1 )
+        x = np.empty( np.shape(force) )
+        for i in range(len(force)):
+            x[i] = (self.mesh[i] + self.mesh[i + 1]) / 2.
+            force[i] = self.temp * np.asmatrix(self.call_basis(x[i], self.mesh, *self.call_basis_args).reshape((len(self.w), 1)))
+        fig = plt.figre(figsize=(8, 6), dpi=80)
+        ax = plt.subplot(1,1,1)
+        ax.plot(x, force)
+        fig.tight_layout()
+        plt.savefig(outfile)
+        
+        
                 
     def _calc_grad(self, i, force, u):        
         positions = u.atoms.get_positions()
-        nlist_accum = np.sum(self.category.nlist_lengths[:(i - 1)]) if i > 0  else 0
+        nlist_accum = np.sum(self.category.nlist_lengths[:i]) if i > 0  else 0
         accu_force = force.reshape( (3,1) )
         
         self.grad.fill(0)
         for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
-            print "%d %d" % (i,j)
             r = positions[j] - positions[i]
             d = ln.norm(r)
             r = r / d            

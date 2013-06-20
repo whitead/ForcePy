@@ -1,8 +1,18 @@
 from forcematch.ForceMatch import *
 
+def unit_step(x, mesh):
+    result = np.zeros(len(mesh) - 1)
+    for m,i in zip(mesh[1:], range(len(mesh) - 1)):
+        if(x < m):
+            result[i] = 1
+            return result
+    return result
+
 fm = ForceMatch("test/test.json")
-pcat = Pairwise()
-pcat.addForce(PairwiseForce(lambda x: x ** 2))
-fm.add_tar_force_cat(pcat)
-fm.add_ref_force_cat(pcat)
+ref_pcat = Pairwise()
+tar_pcat = Pairwise()
+ref_pcat.addForce(PairwiseForce(lambda x: x ** 2))
+tar_pcat.addForce(PairwiseSpectralForce(np.arange(0,3,0.1), unit_step))
+fm.add_tar_force_cat(tar_pcat)
+fm.add_ref_force_cat(ref_pcat)
 fm.force_match()

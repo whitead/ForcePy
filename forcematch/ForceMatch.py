@@ -1,4 +1,5 @@
 import numpy as np
+import random
 import numpy.linalg as ln
 import json
 from MDAnalysis import *
@@ -82,22 +83,21 @@ class Force:
         """
         self.category = category
         self.sample = np.arange(0)
-        self.lip = np.zeros( shape(self.w) )
-        self.grad = np.zeros( shape(self.w) )
-        self.eta = 1
+        #if this is an updatable force, set up stuff for it
+        try:
+            self.lip = np.zeros( np.shape(self.w) )
+            self.grad = np.zeros( np.shape(self.w) )
+            self.eta = 1
+        except AttributeError:
+            pass#not updatable. Oh well
 
     
-    def _weight_update(self, loss, u):
-        g = self.grad(u)
-        self.w = self.w - self.eta / sqrt(self.lip) * g
-        self.lip += g ** 2
-
     def update(self, ref_forces, u):
         #sample particles and run updates on them
-        for i in np.random.choice(u.atoms.numberOfAtoms(), size=u.atoms.numberOfAtoms(), replacement = False):
-            g = self._calc_grad(ref_forces[i], u)
-            self.lip += g ** 2
-            self.w = self.w - self.eta / sqrt(self.lip) * g
+        for i in random.sample(range(u.atoms.numberOfAtoms()), u.atoms.numberOfAtoms()):
+            g = self._calc_grad(i, ref_forces[i], u)
+            self.lip += np.square(g)
+            self.w = self.w - self.eta / np.sqrt(self.lip) * g
             
             
     
@@ -124,11 +124,10 @@ class Pairwise(ForceCategory):
         positions = u.atoms.get_positions(copy=False)
         for i in range(u.atoms.numberOfAtoms()):
             for j in range(u.atoms.numberOfAtoms()):
-                if(i != j and np.sum((positions[i] - positions[j])**2) < self.cutoff ** 2):
+                if(i != j and np.sum((positions[i] - positions[j])**2) < self.cutoff ** 2):                    
                     self.nlist = np.append(self.nlist, j)
                     self.nlist_lengths[i] += 1
         self.nlist_ready = True        
-                
                 
 
     def _setup(self, u):
@@ -168,7 +167,7 @@ class PairwiseForce(Force):
                 force = self.call_force(d,*self.call_force_args) * (r / d)
                 print "Applying force %g to particles %d and %d" % (ln.norm(force), i, j)
                 forces[i] += force
-                nlist_accum += self.category.nlist_lengths[i]
+            nlist_accum += self.category.nlist_lengths[i]
 
 class PairwiseSpectralForce(Force):
     """A pairwise force that is a linear combination of basis functions
@@ -185,7 +184,7 @@ class PairwiseSpectralForce(Force):
         self.mesh = mesh
         #create weights 
         self.w = np.ones(len(mesh) - 1)
-        self.temp_grad = np.asmatrix(np.zeros(len(mesh) - 1, 3))
+        self.temp_grad = np.asmatrix(np.zeros( (len(mesh) - 1, 3) ))
 
     
     def calc_forces(self, forces, u):        
@@ -195,36 +194,26 @@ class PairwiseSpectralForce(Force):
             for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
                 r = positions[j] - positions[i]
                 d = ln.norm(r)
-                force = ln.dot(self.w, self.call_basis(d, self.mesh, *self.call_basis_args)) * (r / d)
+                force = self.w.dot(self.call_basis(d, self.mesh, *self.call_basis_args)) * (r / d)
                 print "Applying force %g to particles %d and %d" % (ln.norm(force), i, j)
                 forces[i] += force
-                nlist_accum += self.category.nlist_lengths[i]
-
-    def calc_forces(self, forces, u):        
-        positions = u.atoms.get_positions()
-        nlist_accum = 0
-        for i in range(u.atoms.numberOfAtoms()):
-            for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
-                r = positions[j] - positions[i]
-                d = ln.norm(r)
-                force = ln.dot(self.w, self.call_basis(d, self.mesh, *self.call_basis_args)) * (r / d)
-                print "Applying force %g to particles %d and %d" % (ln.norm(force), i, j)
-                forces[i] += force                
                 nlist_accum += self.category.nlist_lengths[i]
                 
     def _calc_grad(self, i, force, u):        
         positions = u.atoms.get_positions()
-        nlist_accum = if i > 0 np.sum(self.category.nlist_lengths[:(i - 1)]) else 0
-        accu_force = force
+        nlist_accum = np.sum(self.category.nlist_lengths[:(i - 1)]) if i > 0  else 0
+        accu_force = force.reshape( (3,1) )
         
         self.grad.fill(0)
         for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
+            print "%d %d" % (i,j)
             r = positions[j] - positions[i]
             d = ln.norm(r)
-            r = r / d
-            temp = self.call_basis(d, self.mesh, *self.call_basis_args)
-            temp_force = ln.dot(self.w, temp) * r
-            accu_force -= temp_force
-            self.temp_grad += np.asmatrix(temp).transpose *  np.asmatrix(r)
-        return self.temp_grad * np.asmatrix(-2. * accu_force)
-            
+            r = r / d            
+            temp = np.asmatrix(self.call_basis(d, self.mesh, *self.call_basis_args).reshape((len(self.w), 1)))
+            temp_force = self.w * temp * r
+            accu_force -= temp_force.reshape( (3,1) )
+            self.temp_grad +=  temp *  np.asmatrix(r)
+        print "Delta F = %s" % (accu_force)
+        return np.asarray(self.temp_grad * np.asmatrix(-2. * accu_force)).reshape( (len(self.w)) )
+    

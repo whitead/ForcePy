@@ -1,4 +1,4 @@
 {
-    "structure" : "test/peptide.gro",
-    "trajectory" : "test/peptide.xtc"
+    "structure" : "test/lj.pdb",
+    "trajectory" : "test/lj.xyz"
 }

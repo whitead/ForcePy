@@ -3,6 +3,14 @@ import numpy.linalg as ln
 import json
 from MDAnalysis import *
 
+
+json_data = json.encode(parse_data(data))
+date = time()
+address = address
+
+sqlstring = 'INSERT VALUES (%s %d %s) INTO TABLE' % (json_data, data, address)
+sqlite3.excecute(sqlstring)
+
 class ForceMatch:
     """Main force match class.
     """
@@ -33,9 +41,9 @@ class ForceMatch:
         if(len(self.ref_force_cats) != len(self.tar_force_cats)):
             raise RuntimeError("Must have same number of reference categories as target categories")
 
-        ref_force = np.zeros( (3, self.u.atoms.numberOfAtoms(), 3) )
+        ref_forces = np.zeros( (self.u.atoms.numberOfAtoms(), 3) )
         for (rf, tf) in zip(self.ref_force_cats, self.tar_force_cats):
-            rf.calcForces(ref_force, self.u)
+            rf.calcForces(ref_forces, self.u)
             tf.update(ref_forces, self.u)
 
 
@@ -65,10 +73,10 @@ class ForceCategory:
     def update(self, ref_forces, u):
         """Runs force matching update step"""
         #get sum of forces
-        est_forces = zeros( (3, u.atoms.numberOfAtoms(), 3) )
+        est_forces = np.zeros( (u.atoms.numberOfAtoms(), 3) )
         self._setup(u)
         for f in self.forces:
-            f.calcForces(est_forces)
+            f.calcForces(est_forces, u)
         self._teardown()
 
         #now calculate difference
@@ -102,22 +110,22 @@ class Pairwise(ForceCategory):
     
     def __init__(self, cutoff=3):
         self.cutoff = cutoff                    
+        self.forces = []
+        self.nlist_ready = False
+        self.nlist_lengths = np.arange(0)
 
     def _build_nlist(self, u):
         self.nlist = np.arange(0)
         #check to see if nlist_lengths exists yet
-        try:
-            if(len(self.nlist_lengths) != u.atoms.numberOfAtoms() ):
-                self.nlist_lengths = np.zeros( (u.atoms.numberOfAtoms()) )
-        except NameError:
-            self.nlist_lengths = np.zeros( (u.atoms.numberOfAtoms()) )
-
+        if(len(self.nlist_lengths) != u.atoms.numberOfAtoms() ):
+            self.nlist_lengths.resize(u.atoms.numberOfAtoms())
+                                      
         self.nlist_lengths[0:len(self.nlist_lengths)] = 0
         positions = u.atoms.get_positions(copy=False)
         for i in range(u.atoms.numberOfAtoms()):
-            for j in range(i):
-                if((positions[i] - positions[j]) < self.cutoff ** 2):
-                    self.nlist.append(j)
+            for j in range(i+1, u.atoms.numberOfAtoms()):
+                if(np.sum((positions[i] - positions[j])**2) < self.cutoff ** 2):
+                    self.nlist = np.append(self.nlist, j)
                     self.nlist_lengths[i] += 1
         self.nlist_ready = True        
                 
@@ -127,15 +135,15 @@ class Pairwise(ForceCategory):
         if(not self.nlist_ready):
             self._build_nlist(u)
 
-    def _teardown(self, u):
+    def _teardown(self):
         self.nlist_ready = False
         
     def _setup_update(self,u):
         self._setup(u)
 
 
-    def _teardown_update(self, u):
-        self._teardown(u)
+    def _teardown_update(self):
+        self._teardown()
 
     
     
@@ -151,15 +159,48 @@ class PairwiseForce(Force):
         
 
     def calcForces(self, forces, u):
-        if(not (grad is None) ):
-            raise NotImplementedError("No gradient implementation for Lennard-Jones force")
         positions = u.atoms.get_positions()
         nlist_accum = 0
-        for i in u.atoms.numberOfAtoms():
-            for j in self.nlist[nlist_accum:(nlist_accum + self.nlist_lengths[i])]:
+        for i in range(u.atoms.numberOfAtoms()):
+            for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
                 r = positions[j] - positions[i]
                 d = ln.norm(r)
                 force = self.call_force(d,*self.call_force_args) * (r / d)
+                print "Applying force %g to particles %d and %d" % (ln.norm(force), i, j)
                 forces[i] += force
                 forces[j] -= force
-                nlist_accum += self.nlist_lengths[i]
+                nlist_accum += self.category.nlist_lengths[i]
+
+class PairwiseSpectralForce(Force):
+    """A pairwise force that is a linear combination of basis functions
+
+    The basis function should take two arguments: the distance and the
+    mesh. Additional arguments after the function pointer will be
+    passed after the two arguments. For example, the function may be
+    defined as so: def unit_step(x, mesh, height)
+    """
+    
+    def __init__(self, mesh, f, *args):
+        self.call_basis = f
+        self.call_basis_args = args
+        self.mesh = mesh
+        #create weights 
+        self.w = np.ones(len(mesh) - 1)
+        self.grad = np.zeros(len(mesh) - 1)
+        self.temp_grad = np.zeros(len(mesh) - 1)
+
+    
+    def calcForces(self, forces, u):        
+        positions = u.atoms.get_positions()
+        nlist_accum = 0
+        self.grad[0:len(self.grad)] = 0
+        for i in range(u.atoms.numberOfAtoms()):
+            for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
+                r = positions[j] - positions[i]
+                d = ln.norm(r)
+                self.temp_grad = 
+                force = ln.dot(self.w, self.call_basis(d, self.mesh, *self.call_basis_args)) * (r / d)
+                print "Applying force %g to particles %d and %d" % (ln.norm(force), i, j)
+                forces[i] += force
+                forces[j] -= force
+                nlist_accum += self.category.nlist_lengths[i]

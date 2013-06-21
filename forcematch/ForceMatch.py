@@ -5,6 +5,7 @@ import json
 import matplotlib.pyplot as plt
 import matplotlib.mlab as mlab
 from MDAnalysis import *
+from math import *
 
 
 class ForceMatch:
@@ -38,9 +39,12 @@ class ForceMatch:
             raise RuntimeError("Must have same number of reference categories as target categories")
 
         ref_forces = np.zeros( (self.u.atoms.numberOfAtoms(), 3) )
-        for (rf, tf) in zip(self.ref_force_cats, self.tar_force_cats):
-            rf.calc_forces(ref_forces, self.u)
-            tf.update(ref_forces, self.u)
+        #for ts in self.u.trajectory:
+        for i in range(100):
+            for (rf, tf) in zip(self.ref_force_cats, self.tar_force_cats):
+                rf.calc_forces(ref_forces, self.u)
+                tf.update(ref_forces, self.u)
+            
 
 
 #abstract classes
@@ -89,20 +93,28 @@ class Force:
         try:
             self.lip = np.ones( np.shape(self.w) )
             self.grad = np.zeros( np.shape(self.w) )
-            self.eta = 1
+            self.eta = 25
         except AttributeError:
             pass#not updatable. Oh well
+        self.index = 0
 
     
     def update(self, ref_forces, u):
-        #sample particles and run updates on them
+        #sample particles and run updates on them        
+        self.plot("set_%d.png" % (self.index))
+        self.index += 1
+        net_df = 0
         for i in random.sample(range(u.atoms.numberOfAtoms()),u.atoms.numberOfAtoms()):
-            g = self._calc_grad(i, ref_forces[i], u)
-            self.lip += np.square(g)
-            print "%s" % self.w            
-            self.w = self.w - self.eta / np.sqrt(self.lip) * g
-            print "%s" % self.w            
-            self.plot("setp_%d.png" % i)
+            df = self.calc_particle_force(i,u) - ref_forces[i].reshape( (3,1) )#get delta force in particle i
+            net_df += ln.norm(df)
+            grad = np.asarray(self.temp_grad * df).reshape( (len(self.w)) )
+            self.lip += np.square(grad)
+            self.w = self.w - self.eta / np.sqrt(self.lip) * grad
+        print "log error = %g" % (log(net_df))
+
+
+
+
             
     
 
@@ -169,7 +181,6 @@ class PairwiseForce(Force):
                 r = positions[j] - positions[i]
                 d = ln.norm(r)
                 force = self.call_force(d,*self.call_force_args) * (r / d)
-                print "Applying force %g to particles %d and %d" % (ln.norm(force), i, j)
                 forces[i] += force
             nlist_accum += self.category.nlist_lengths[i]
 
@@ -187,7 +198,7 @@ class PairwiseSpectralForce(Force):
         self.call_basis_args = args
         self.mesh = mesh
         #create weights 
-        self.w = np.zeros(len(mesh) - 1)
+        self.w = np.zeros( len(mesh) - 1 )
         self.temp_grad = np.asmatrix(np.zeros( (len(mesh) - 1, 3) ))
 
     
@@ -203,34 +214,36 @@ class PairwiseSpectralForce(Force):
                 forces[i] += force
             nlist_accum += self.category.nlist_lengths[i]
 
-    def plot(self, outfile):
-        force = np.empty( len(self.mesh) - 1 )
-        x = np.empty( np.shape(force) )
-        for i in range(len(force)):
-            x[i] = (self.mesh[i] + self.mesh[i + 1]) / 2.
-            force[i] = self.temp * np.asmatrix(self.call_basis(x[i], self.mesh, *self.call_basis_args).reshape((len(self.w), 1)))
-        fig = plt.figre(figsize=(8, 6), dpi=80)
-        ax = plt.subplot(1,1,1)
-        ax.plot(x, force)
-        fig.tight_layout()
-        plt.savefig(outfile)
-        
-        
-                
-    def _calc_grad(self, i, force, u):        
+    def calc_particle_force(self, i, u):
         positions = u.atoms.get_positions()
         nlist_accum = np.sum(self.category.nlist_lengths[:i]) if i > 0  else 0
-        accu_force = force.reshape( (3,1) )
-        
-        self.grad.fill(0)
+        force = np.zeros( (3,1) ) 
+        self.temp_grad.fill(0)
         for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
             r = positions[j] - positions[i]
             d = ln.norm(r)
             r = r / d            
-            temp = np.asmatrix(self.call_basis(d, self.mesh, *self.call_basis_args).reshape((len(self.w), 1)))
-            temp_force = self.w * temp * r
-            accu_force -= temp_force.reshape( (3,1) )
-            self.temp_grad +=  temp *  np.asmatrix(r)
-        print "Delta F = %s" % (accu_force)
-        return np.asarray(self.temp_grad * np.asmatrix(-2. * accu_force)).reshape( (len(self.w)) )
+            temp = self.call_basis(d, self.mesh, *self.call_basis_args)
+            force += (self.w.dot(temp)  * r).reshape( (3,1) )
+            self.temp_grad +=  np.asmatrix(temp.reshape((len(self.w), 1))) *  np.asmatrix(r)
+        return force
     
+
+
+    def plot(self, outfile):
+        mesh = np.arange(min(self.mesh), max(self.mesh), 0.01)
+        force = np.empty( len(mesh) - 1 )
+        true_force = np.empty( len(mesh) - 1 )
+        x = np.empty( np.shape(force) )
+        for i in range(len(force)):
+            x[i] = (mesh[i] + mesh[i + 1]) / 2.
+            force[i] = self.w * np.asmatrix(self.call_basis(x[i], self.mesh, *self.call_basis_args).reshape((len(self.w), 1)))
+            true_force[i] = 4 * (6 * x[i]**(-7) - 12 * x[i] ** (-13) )
+        fig = plt.figure(figsize=(8, 6), dpi=80)
+        ax = plt.subplot(1,1,1)
+        ax.plot(x, force, color="blue")
+        ax.plot(x, true_force, color="red")
+        ax.axis([min(x), max(x), -25, 25])
+        fig.tight_layout()
+        plt.savefig(outfile)
+                                  

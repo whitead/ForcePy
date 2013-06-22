@@ -39,11 +39,11 @@ class ForceMatch:
             raise RuntimeError("Must have same number of reference categories as target categories")
 
         ref_forces = np.zeros( (self.u.atoms.numberOfAtoms(), 3) )
-        #for ts in self.u.trajectory:
-        for i in range(100):
+        for ts in self.u.trajectory:
             for (rf, tf) in zip(self.ref_force_cats, self.tar_force_cats):
                 rf.calc_forces(ref_forces, self.u)
                 tf.update(ref_forces, self.u)
+            ref_forces.fill(0)
             
 
 
@@ -93,7 +93,7 @@ class Force:
         try:
             self.lip = np.ones( np.shape(self.w) )
             self.grad = np.zeros( np.shape(self.w) )
-            self.eta = 25
+            self.eta = 0.5
         except AttributeError:
             pass#not updatable. Oh well
         self.index = 0
@@ -101,16 +101,19 @@ class Force:
     
     def update(self, ref_forces, u):
         #sample particles and run updates on them        
-        self.plot("set_%d.png" % (self.index))
+        if(self.index % 3 == 0):
+            self.plot("set_%d.png" % (self.index))
+            print "set_%d.png" % (self.index)
         self.index += 1
         net_df = 0
         for i in random.sample(range(u.atoms.numberOfAtoms()),u.atoms.numberOfAtoms()):
             df = self.calc_particle_force(i,u) - ref_forces[i].reshape( (3,1) )#get delta force in particle i
             net_df += ln.norm(df)
             grad = np.asarray(self.temp_grad * df).reshape( (len(self.w)) )
-            self.lip += np.square(grad)
+            self.lip +=  np.sqrt(np.square(grad))
             self.w = self.w - self.eta / np.sqrt(self.lip) * grad
         print "log error = %g" % (log(net_df))
+
 
 
 
@@ -210,7 +213,6 @@ class PairwiseSpectralForce(Force):
                 r = positions[j] - positions[i]
                 d = ln.norm(r)
                 force = self.w.dot(self.call_basis(d, self.mesh, *self.call_basis_args)) * (r / d)
-                print "Applying force %g to particles %d and %d" % (ln.norm(force), i, j)
                 forces[i] += force
             nlist_accum += self.category.nlist_lengths[i]
 

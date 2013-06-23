@@ -1,0 +1,4 @@
+{
+    "structure" : "test/methanol/cg.pdb",
+    "trajectory" : "test/methanol/cg.trr"
+}

@@ -1,4 +1,4 @@
-from forcematch.ForceMatch import *
+from forcematch import *
 
 def unit_step(x, mesh):
     result = np.zeros(len(mesh))

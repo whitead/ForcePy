@@ -1,0 +1,7 @@
+1. Implement neighborlist
+2. Work on speeed
+3. Set-up for distribution
+2. Implement TopoCategory
+3. Implement Angles, Bonds, Dihedrals
+
+possibly use scipy weave to speed up algorithm

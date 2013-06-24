@@ -1,11 +1,10 @@
+from Forces import Force
+
 import numpy as np
-import random
-import numpy.linalg as ln
 import json
-import matplotlib.pyplot as plt
-import matplotlib.mlab as mlab
-from MDAnalysis import *
 from math import *
+
+
 
 
 class ForceMatch:
@@ -81,20 +80,42 @@ class ForceCategory:
 
 
 
-class Force:
-    """Can calculate forces from a universe object
-    """
-    
-    def _register_hook(self, category):
-        """Register the force with the category and keep a reference to it
-        """
-        self.category = category
-        self.sample = np.arange(0)
+class NeighborList:
+    def __init__(self, nparticles, box, cell_width):
 
-            
-    
 
-#concrete class
+        #set up cell number and data
+        self.cell_number = [int(ceil((x[1] - x[0]) / cell_width)) for x in box]
+        print self.cell_number
+
+        self.head = np.empty(nparticles)
+        self.cells = np.empty( (self.cell_number[0] * self.cell_number[1] * self.cell_number[2]) )
+
+        #pre-compute neighbors. Waste of space, but saves programming effort required for ghost cellls
+        self.cell_neighbors = [[] for x in range(len(self.cells))]
+        for xi in range(self.cell_number[0]):
+            for yi in range(self.cell_number[1]):
+                for zi in range(self.cell_number[2]):
+                    #get neighbors
+                    index = xi * self.cell_number[0] ** 2 + yi * self.cell_number[1] + zi
+                    index_vector = [xi, yi, zi]
+                    neighs = [[] for x in range(3)]
+                    for i in range(3):
+                        neighs[i] = [self.cell_number[i] - 1 if index_vector[i] == 0 else index_vector[i] - 1,
+                                     index_vector[i],
+                                     0 if index_vector[i] == self.cell_number[i] - 1 else index_vector[i] + 1]
+                    for xd in neighs[0]:
+                        for yd in neighs[1]:
+                            for zd in neighs[2]:
+                                neighbor = xd * self.cell_number[0] ** 2 + \
+                                                                       yd * self.cell_number[1]  + \
+                                                                       zd
+                                if(neighbor != index):
+                                    self.cell_neighbors[index].append(neighbor)                    
+
+    def bin_particles(self, coords):
+        
+        
 
 class Pairwise(ForceCategory):
     """Pairwise force category. It handles constructing a neighbor-list at each time-step. 
@@ -111,16 +132,21 @@ class Pairwise(ForceCategory):
         #check to see if nlist_lengths exists yet
         if(len(self.nlist_lengths) != u.atoms.numberOfAtoms() ):
             self.nlist_lengths.resize(u.atoms.numberOfAtoms())
-                                      
+        
+        head, cells = self._generate_cells(u)
         self.nlist_lengths.fill(0)
         positions = u.atoms.get_positions(copy=False)
         for i in range(u.atoms.numberOfAtoms()):
+            icell = foo            
+            for ncell in range(ncell_number):
+                net_dcell = icell + self._adjacent_cells
+                j = head[self._cell_mapping[net_dcell + self._map_offset]]
             for j in range(u.atoms.numberOfAtoms()):
                 if(i != j and np.sum((positions[i] - positions[j])**2) < self.cutoff ** 2):                    
                     self.nlist = np.append(self.nlist, j)
                     self.nlist_lengths[i] += 1
         self.nlist_ready = True        
-                
+                    
 
     def _setup(self, u):
         if(not self.nlist_ready):
@@ -136,206 +162,5 @@ class Pairwise(ForceCategory):
     def _teardown_update(self):
         self._teardown()
 
-class FileForce(Force):
-    """ Reads forces from the trajectory file
-    """
+NeighborList(1, [(0,5), (0,5), (0,5)], 4)
 
-    def calc_forces(self, forces, u):
-        forces[:] = u.trajectory.ts._forces
-
-    
-    
-class PairwiseForce(Force):
-    """ A pairwise force that takes in a function for calculating the force. The function passed should
-    accept the scalar distance between the two particles as its first argument and any additional arguments
-    it requires should be passed after the function.
-    """
-    def __init__(self, f, *args):
-        self.call_force = f
-        self.call_force_args = args
-
-        
-
-    def calc_forces(self, forces, u):
-        positions = u.atoms.get_positions()
-        nlist_accum = 0
-        for i in range(u.atoms.numberOfAtoms()):
-            for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
-                r = positions[j] - positions[i]
-                d = ln.norm(r)
-                force = self.call_force(d,*self.call_force_args) * (r / d)
-                forces[i] += force
-            nlist_accum += self.category.nlist_lengths[i]
-
-
-class Regularizer:
-    """grad_fxn: takes in vector returns gradient vector
-       reg_fxn: takes in vector, returns scalar
-     """
-    def __init__(self, grad_fxn, reg_fxn):
-        self.grad_fxn = grad_fxn
-        self.reg_fxn = reg_fxn
-
-class SmoothRegularizer(Regularizer):
-    """ sum_i (w_{i+1} - w{i}) ^ 2
-    """
-
-    def __init__(self):
-        raise Exception("Smoothregulizer is static and should be instanced")
-
-    @staticmethod
-    def grad_fxn(x):
-        g = np.empty( np.shape(x) )
-        g[0] = 2 * x[0]
-        g[-1] = 2 * x[-1]
-        g[1:] = 4 * x[1:] - 2 * x[:-1]
-        g[:-1] -= 2 * x[1:]
-        return g
-
-    @staticmethod
-    def reg_fxn(x):
-        return 0
-
-
-class L2Regularizer(Regularizer):
-    """ sum_i (w_{i+1} - w{i}) ^ 2
-    """
-
-    def __init__(self):
-        raise Exception("L2Regularizer is static and should be instanced")
-
-    @staticmethod
-    def grad_fxn(x):
-        g = 2 * np.copy(x)
-        return g
-
-    @staticmethod
-    def reg_fxn(x):
-        return ln.norm(x)
-
-class UniformMesh:
-
-    def __init__(self, l, r, dx):
-        self.l = l
-        self.r = r
-        self.dx = dx
-        self.length = int(ceil((self.r - self.l) / self.dx))
-
-    def max(self):
-        return self.r
-
-    def min(self):
-        return self.l
-
-    def mesh_index(self, x):
-        return max(0, min(self.length - 1, int(floor( (x - self.l) / self.dx) )))
-        
-    def __len__(self):
-        return self.length
-
-    def __getitem__(self, i):
-        return i * self.dx + self.l
-        
-
-class PairwiseSpectralForce(Force):
-    """A pairwise force that is a linear combination of basis functions
-
-    The basis function should take two arguments: the distance and the
-    mesh. Additional arguments after the function pointer will be
-    passed after the two arguments. For example, the function may be
-    defined as so: def unit_step(x, mesh, height)
-    """
-    
-    def __init__(self, mesh, updates_per_frame, f, *args):
-        self.call_basis = f
-        self.call_basis_args = args
-        self.mesh = mesh
-        #create weights 
-        self.w = np.zeros( len(mesh) )
-        self.temp_grad = np.asmatrix(np.zeros( (len(mesh), 3) ))
-        self.regularization = []
-        #if this is an updatable force, set up stuff for it
-        try:
-            self.lip = np.ones( np.shape(self.w) )
-            self.grad = np.zeros( np.shape(self.w) )
-            self.eta = 1
-        except AttributeError:
-            pass#not updatable. Oh well
-        self.index = 0
-        self.passes = updates_per_frame
-
-
-
-    def add_regularizer(self, regularizer):
-        """Add regularization to the stochastic gradient descent
-           algorithm.
-        """
-        self.regularization.append((regularizer.grad_fxn, regularizer.reg_fxn))
-
-
-    def update(self, ref_forces, u):
-
-        for p in range(self.passes):
-            net_df = 0
-            self.index += 1
-
-            if(self.index % 10 == 0):
-                self.plot("set_%d.png" % (self.index))
-                print "set_%d.png" % (self.index)
-
-            #sample particles and run updates on them 
-            for i in random.sample(range(u.atoms.numberOfAtoms()),u.atoms.numberOfAtoms()):
-
-                df = self.calc_particle_force(i,u) - ref_forces[i].reshape( (3,1) )#get delta force in particle i
-                net_df += ln.norm(df)            
-                grad = np.asarray(self.temp_grad * df).reshape( (len(self.w)) )
-                for r in self.regularization:
-                    grad += r[0](self.w)
-                self.lip +=  np.square(grad)
-                self.w = self.w - self.eta * sqrt(self.passes) / np.sqrt(self.lip) * grad
-            print "log error = %g" % (0 if net_df < 1 else log(net_df))
-
-    
-    def calc_forces(self, forces, u):        
-        positions = u.atoms.get_positions()
-        nlist_accum = 0        
-        for i in range(u.atoms.numberOfAtoms()):
-            for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
-                r = positions[j] - positions[i]
-                d = ln.norm(r)
-                force = self.w.dot(self.call_basis(d, self.mesh, *self.call_basis_args)) * (r / d)
-                forces[i] += force
-            nlist_accum += self.category.nlist_lengths[i]
-
-    def calc_particle_force(self, i, u):
-        positions = u.atoms.get_positions()
-        nlist_accum = np.sum(self.category.nlist_lengths[:i]) if i > 0  else 0
-        force = np.zeros( (3,1) ) 
-        self.temp_grad.fill(0)
-        for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
-            r = positions[j] - positions[i]
-            d = ln.norm(r)
-            r = r / d            
-            temp = self.call_basis(d, self.mesh, *self.call_basis_args)
-            force += (self.w.dot(temp)  * r).reshape( (3,1) )
-            self.temp_grad +=  np.asmatrix(temp.reshape((len(self.w), 1))) *  np.asmatrix(r)
-        return force
-    
-
-
-    def plot(self, outfile):
-        mesh = UniformMesh(self.mesh.min(), self.mesh.max(), self.mesh.dx / 2)
-        force = np.empty( len(mesh) )
-        true_force = np.empty( len(mesh))
-        x = np.empty( np.shape(force) )
-        for i in range(len(force)):
-            x[i] = (mesh[i] + mesh[i + 1]) / 2.
-            force[i] = self.w * np.asmatrix(self.call_basis(x[i], self.mesh, *self.call_basis_args).reshape((len(self.w), 1)))
-        fig = plt.figure(figsize=(8, 6), dpi=80)
-        ax = plt.subplot(1,1,1)
-        ax.plot(x, force, color="blue")
-#        ax.plot(x, true_force, color="red")
-        ax.axis([min(x), max(x), -25, 25])
-        fig.tight_layout()
-        plt.savefig(outfile)
-                                  

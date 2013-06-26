@@ -2,8 +2,8 @@ from Forces import Force
 
 import numpy as np
 import json
-from math import *
-
+from math import ceil
+from MDAnalysis import Universe
 
 
 
@@ -81,23 +81,27 @@ class ForceCategory:
 
 
 class NeighborList:
-    def __init__(self, nparticles, box, cell_width):
-
-
+    """Neighbor list class
+    """
+    def __init__(self, u, cutoff):
+        
         #set up cell number and data
-        self.cell_number = [int(ceil((x[1] - x[0]) / cell_width)) for x in box]
-        print self.cell_number
-
-        self.head = np.empty(nparticles)
-        self.cells = np.empty( (self.cell_number[0] * self.cell_number[1] * self.cell_number[2]) )
+        self.cutoff = cutoff
+        self.box = [(0,x) for x in u.dimensions[:3]]
+        self.nlist_lengths = np.arange(0, dtype='int32')
+        self.nlist = np.arange(0, dtype='int32')
+        self.cell_number = [int(ceil((x[1] - x[0]) / self.cutoff)) for x in self.box]
+        self.bins_ready = False
+        self.cells = np.empty(u.atoms.numberOfAtoms(), dtype='int32')
+        self.head = np.empty( reduce(lambda x,y: x * y, self.cell_number), dtype='int32')
 
         #pre-compute neighbors. Waste of space, but saves programming effort required for ghost cellls
-        self.cell_neighbors = [[] for x in range(len(self.cells))]
+        self.cell_neighbors = [[] for x in range(len(self.head))]
         for xi in range(self.cell_number[0]):
             for yi in range(self.cell_number[1]):
                 for zi in range(self.cell_number[2]):
                     #get neighbors
-                    index = xi * self.cell_number[0] ** 2 + yi * self.cell_number[1] + zi
+                    index = (xi * self.cell_number[0] + yi) * self.cell_number[1] + zi
                     index_vector = [xi, yi, zi]
                     neighs = [[] for x in range(3)]
                     for i in range(3):
@@ -110,42 +114,74 @@ class NeighborList:
                                 neighbor = xd * self.cell_number[0] ** 2 + \
                                                                        yd * self.cell_number[1]  + \
                                                                        zd
-                                if(neighbor != index):
-                                    self.cell_neighbors[index].append(neighbor)                    
-
-    def bin_particles(self, coords):
+                                self.cell_neighbors[index].append(neighbor)
         
+
+    def bin_particles(self, u):
+        self.head.fill(-1)
+        positions = u.atoms.get_positions(copy=False)
+        positions = u.atoms.coordinates()
+        for i in range(u.atoms.numberOfAtoms()):
+            icell = 0
+            #fancy index and binning loop over dimensions
+            for j in range(3):
+                icell = int((positions[i][j] - self.box[j][0]) / (self.box[j][1] - self.box[j][0]) * self.cell_number[j]) + icell * self.cell_number[j]                
+            #push what is on the head into the cells
+            self.cells[i] = self.head[icell]
+            #add current value
+            self.head[icell] = i
+
+        self.bins_ready = True
+
+    def build_nlist(self, u):
+
+        self.nlist = np.resize(self.nlist, u.atoms.numberOfAtoms() * u.atoms.numberOfAtoms())
+        #check to see if nlist_lengths exists yet
+        if(len(self.nlist_lengths) != u.atoms.numberOfAtoms() ):
+            self.nlist_lengths.resize(u.atoms.numberOfAtoms())
+        
+        if(not self.bins_ready):
+            self.bin_particles(u)
+
+        self.nlist_lengths.fill(0)
+        positions = u.atoms.get_positions(copy=False)
+        nlist_count = 0
+        for i in range(u.atoms.numberOfAtoms()):
+            icell = 0
+            #fancy indepx and binning loop over dimensions
+            for j in range(3):
+                icell = int((positions[i][j] - self.box[j][0]) / (self.box[j][1] - self.box[j][0]) * self.cell_number[j]) + icell * self.cell_number[j]                
+            for ncell in self.cell_neighbors[icell]:
+                j = self.head[ncell]
+                while(j != - 1):
+                    if(i != j and np.sum((positions[i] - positions[j])**2) < self.cutoff ** 2):
+                        self.nlist[nlist_count] = j
+                        self.nlist_lengths[i] += 1
+                        nlist_count += 1
+                    j = self.cells[j]
+
+        self.nlist = self.nlist[:nlist_count]
+        return self.nlist, self.nlist_lengths
+
         
 
 class Pairwise(ForceCategory):
     """Pairwise force category. It handles constructing a neighbor-list at each time-step. 
     """
     
-    def __init__(self, cutoff=10):
+    def __init__(self, cutoff=12):
         self.cutoff = cutoff                    
         self.forces = []
         self.nlist_ready = False
-        self.nlist_lengths = np.arange(0)
+        self.nlist_obj = None
 
     def _build_nlist(self, u):
-        self.nlist = np.arange(0)
-        #check to see if nlist_lengths exists yet
-        if(len(self.nlist_lengths) != u.atoms.numberOfAtoms() ):
-            self.nlist_lengths.resize(u.atoms.numberOfAtoms())
-        
-        head, cells = self._generate_cells(u)
-        self.nlist_lengths.fill(0)
-        positions = u.atoms.get_positions(copy=False)
-        for i in range(u.atoms.numberOfAtoms()):
-            icell = foo            
-            for ncell in range(ncell_number):
-                net_dcell = icell + self._adjacent_cells
-                j = head[self._cell_mapping[net_dcell + self._map_offset]]
-            for j in range(u.atoms.numberOfAtoms()):
-                if(i != j and np.sum((positions[i] - positions[j])**2) < self.cutoff ** 2):                    
-                    self.nlist = np.append(self.nlist, j)
-                    self.nlist_lengths[i] += 1
-        self.nlist_ready = True        
+        if(self.nlist_obj is None):
+            self.nlist_obj = NeighborList(u, self.cutoff)
+        self.nlist, self.nlist_lengths = self.nlist_obj.build_nlist(u)
+
+        self.nlist_ready = True
+
                     
 
     def _setup(self, u):
@@ -161,6 +197,4 @@ class Pairwise(ForceCategory):
 
     def _teardown_update(self):
         self._teardown()
-
-NeighborList(1, [(0,5), (0,5), (0,5)], 4)
 

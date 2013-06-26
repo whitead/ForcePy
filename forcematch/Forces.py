@@ -1,11 +1,15 @@
 from ForceMatch import *
+from Mesh import *
 
 import numpy as np
 import random
 import numpy.linalg as ln
-#import matplotlib.pyplot as plt
-#import matplotlib.mlab as mlab
-#from MDAnalysis import *
+import matplotlib.pyplot as plt
+import matplotlib.mlab as mlab
+from MDAnalysis import Universe
+from math import ceil,log
+from scipy import weave
+from scipy.weave import converters
 
 class Force:
     """Can calculate forces from a universe object
@@ -113,7 +117,9 @@ class PairwiseSpectralForce(Force):
         self.mesh = mesh
         #create weights 
         self.w = np.zeros( len(mesh) )
-        self.temp_grad = np.asmatrix(np.zeros( (len(mesh), 3) ))
+        self.temp_grad = np.zeros( (len(mesh), 3) )
+        self.temp_force = np.zeros( 3 )
+        self.w_grad = np.empty( len(mesh) )
         self.regularization = []
         #if this is an updatable force, set up stuff for it
         try:
@@ -144,12 +150,27 @@ class PairwiseSpectralForce(Force):
                 self.plot("set_%d.png" % (self.index))
                 print "set_%d.png" % (self.index)
 
+            #stuff for weave
+            grad = self.w_grad
+            w_length = len(self.w)
+            temp_grad = self.temp_grad
+
             #sample particles and run updates on them 
             for i in random.sample(range(u.atoms.numberOfAtoms()),u.atoms.numberOfAtoms()):
 
-                df = self.calc_particle_force(i,u) - ref_forces[i].reshape( (3,1) )#get delta force in particle i
-                net_df += ln.norm(df)            
-                grad = np.asarray(self.temp_grad * df).reshape( (len(self.w)) )
+                df = self.calc_particle_force(i,u) - ref_forces[i]#get delta force in particle i
+                net_df += ln.norm(df)
+                code = """
+                       for(int i = 0; i < w_length; i++) {
+                           grad(i) = 0;
+                           for(int j = 0; j < 3; j++)
+                               grad(i) += temp_grad(i,j) * df(j);
+                       }
+                """
+                weave.inline(code, ['w_length', 'grad', 'df', 'temp_grad'],
+                         type_converters=converters.blitz,
+                         compiler = 'gcc')
+                #grad = np.apply_along_axis(np.sum, 1, self.temp_grad * df)
                 for r in self.regularization:
                     grad += r[0](self.w)
                 self.lip +=  np.square(grad)
@@ -171,15 +192,33 @@ class PairwiseSpectralForce(Force):
     def calc_particle_force(self, i, u):
         positions = u.atoms.get_positions()
         nlist_accum = np.sum(self.category.nlist_lengths[:i]) if i > 0  else 0
-        force = np.zeros( (3,1) ) 
+        self.temp_force.fill(0)
         self.temp_grad.fill(0)
+        #needed for weaving code
+        w_length = len(self.w)
+        w = self.w
+        temp_grad = self.temp_grad
+        force = self.temp_force
         for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
             r = positions[j] - positions[i]
             d = ln.norm(r)
             r = r / d            
             temp = self.call_basis(d, self.mesh, *self.call_basis_args)
-            force += (self.w.dot(temp)  * r).reshape( (3,1) )
-            self.temp_grad +=  np.asmatrix(temp.reshape((len(self.w), 1))) *  np.asmatrix(r)
+            code = """
+                   #line 185 "Forces.py"
+     
+                   for(int i = 0; i < w_length; i++) {
+                       for(int j = 0; j < 3; j++) {
+                           force(j) += w(i) * temp(i) * r(j);
+                           temp_grad(i,j) += temp(i) * r(j);
+                       }
+                    }
+                    """
+            weave.inline(code, ['w', 'w_length', 'temp', 'r', 'force', 'temp_grad'],
+                         type_converters=converters.blitz,
+                         compiler = 'gcc')
+            #force += (self.w.dot(temp)  * r).reshape( (3,1) )
+            #self.temp_grad +=  np.asmatrix(temp.reshape((len(self.w), 1))) *  np.asmatrix(r)
         return force
     
 

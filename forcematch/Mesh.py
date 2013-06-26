@@ -1,3 +1,5 @@
+from math import ceil, floor
+
 class UniformMesh:
     """Uniform mesh. 
     """

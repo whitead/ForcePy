@@ -1,9 +1,14 @@
 from Forces import Force
 
+import random
 import numpy as np
+import numpy.linalg as ln
 import json
 from math import ceil
 from MDAnalysis import Universe
+from scipy import weave
+from scipy.weave import converters
+from math import ceil, log
 
 
 
@@ -53,7 +58,7 @@ class ForceMatch:
 
 #abstract classes
 
-class ForceCategory:
+class ForceCategory(object):
     """A category of force/potential type.
     
     The forces used in force matching are broken into categories, where
@@ -62,8 +67,9 @@ class ForceCategory:
    threebody forces, topology forces (bonds, angles, etc).
    """
 
-    def __init__(self):
+    def __init__(self, passes=1):
         self.update_calls = 0
+        self.passes = passes
     
     def addForce(self, force):
         self.forces.append(force)
@@ -81,9 +87,13 @@ class ForceCategory:
         """Runs stochastic gradient force matching update step"""
         self._setup_update(u)
 
+        #allow multiple passes over the same trajectory frame
         for p in range(self.passes):
             net_df = 0
             self.update_calls += 1
+
+            #delete this!
+            self.forces[0].plot("%d.png" % self.update_calls)
 
             #sample particles and run updates on them 
             for i in random.sample(range(u.atoms.numberOfAtoms()),u.atoms.numberOfAtoms()):
@@ -93,7 +103,7 @@ class ForceCategory:
                     df -= f.calc_particle_force(i,u)
                 net_df += ln.norm(df)
 
-
+                #inline C code
                 code = """
                        for(int i = 0; i < w_length; i++) {
                            grad(i) = 0;
@@ -104,6 +114,7 @@ class ForceCategory:
 
                 #now run gradient update step on all the force types
                 for f in self.forces:
+                    #setup temps for inlince C code
                     w_length = len(f.w)
                     grad = f.w_grad
                     temp_grad = f.temp_grad
@@ -114,9 +125,10 @@ class ForceCategory:
                     #grad = np.apply_along_axis(np.sum, 1, self.temp_grad * df)
                     #apply any regularization
                     for r in f.regularization:
-                        grad += r[0](f.w)
-                        f.lip +=  np.square(grad)
-                        f.w = f.w - f.eta * np.sqrt(f.passes) / np.sqrt(f.lip) * grad
+                        grad += r.grad_fxn(f.w)
+
+                    f.lip +=  np.square(grad)
+                    f.w = f.w - f.eta * np.sqrt(self.passes) / np.sqrt(f.lip) * grad
             print "log error = %g" % (0 if net_df < 1 else log(net_df))
         self._teardown_update()
 
@@ -129,10 +141,11 @@ class NeighborList:
         
         #set up cell number and data
         self.cutoff = cutoff
-        self.box = [(0,x) for x in u.dimensions[:3]]
+        #self.box = [(0,x) for x in u.dimensions[:3]]
+        self.box = [(0,5.2) for x in u.dimensions[:3]]
         self.nlist_lengths = np.arange(0, dtype='int32')
         self.nlist = np.arange(0, dtype='int32')
-        self.cell_number = [int(ceil((x[1] - x[0]) / self.cutoff)) for x in self.box]
+        self.cell_number = [max(1,int(ceil((x[1] - x[0]) / self.cutoff))) for x in self.box]        
         self.bins_ready = False
         self.cells = np.empty(u.atoms.numberOfAtoms(), dtype='int32')
         self.head = np.empty( reduce(lambda x,y: x * y, self.cell_number), dtype='int32')
@@ -156,8 +169,13 @@ class NeighborList:
                                 neighbor = xd * self.cell_number[0] ** 2 + \
                                                                        yd * self.cell_number[1]  + \
                                                                        zd
-                                self.cell_neighbors[index].append(neighbor)
-        
+                                if(not neighbor in self.cell_neighbors[index]): #this is possible if wrapped and cell number is 1
+                                    self.cell_neighbors[index].append(neighbor)
+
+    def dump_cells(self):
+        print self.cell_number
+        print self.box
+        print self.cell_neighbors
 
     def bin_particles(self, u):
         self.head.fill(-1)
@@ -166,7 +184,7 @@ class NeighborList:
         for i in range(u.atoms.numberOfAtoms()):
             icell = 0
             #fancy index and binning loop over dimensions
-            for j in range(3):
+            for j in range(3):                
                 icell = int((positions[i][j] - self.box[j][0]) / (self.box[j][1] - self.box[j][0]) * self.cell_number[j]) + icell * self.cell_number[j]                
             #push what is on the head into the cells
             self.cells[i] = self.head[icell]
@@ -177,7 +195,7 @@ class NeighborList:
 
     def build_nlist(self, u):
 
-        self.nlist = np.resize(self.nlist, u.atoms.numberOfAtoms() * u.atoms.numberOfAtoms())
+        self.nlist = np.resize(self.nlist, (u.atoms.numberOfAtoms() - 1) * u.atoms.numberOfAtoms())
         #check to see if nlist_lengths exists yet
         if(len(self.nlist_lengths) != u.atoms.numberOfAtoms() ):
             self.nlist_lengths.resize(u.atoms.numberOfAtoms())
@@ -192,7 +210,7 @@ class NeighborList:
             icell = 0
             #fancy indepx and binning loop over dimensions
             for j in range(3):
-                icell = int((positions[i][j] - self.box[j][0]) / (self.box[j][1] - self.box[j][0]) * self.cell_number[j]) + icell * self.cell_number[j]                
+                icell = int((positions[i][j] - self.box[j][0]) / (self.box[j][1] - self.box[j][0]) * self.cell_number[j]) + icell * self.cell_number[j]          
             for ncell in self.cell_neighbors[icell]:
                 j = self.head[ncell]
                 while(j != - 1):
@@ -212,6 +230,7 @@ class Pairwise(ForceCategory):
     """
     
     def __init__(self, cutoff=12):
+        super(Pairwise, self).__init__()
         self.cutoff = cutoff                    
         self.forces = []
         self.nlist_ready = False

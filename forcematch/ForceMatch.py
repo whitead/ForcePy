@@ -14,10 +14,14 @@ class ForceMatch:
     def __init__(self, input_file):
         self.ref_force_cats = []
         self.tar_force_cats = []
+        self._load_json(input_file)
+    
+    def _load_json(self, input_file):
         with open(input_file, 'r') as f:
             self.json = json.load(f)
         self._test_json(self.json)
         self.u = Universe(self.json["structure"], str(self.json["trajectory"]))
+        
 
                 
     def _test_json(self, json, required_keys = [("structure", "Toplogy file"), ("trajectory", "Trajectory File")]):

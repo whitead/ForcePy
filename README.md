@@ -31,7 +31,8 @@ Forces
 
 TODO
 ==========
+* Need to separate update code out of individual forces, since the net force deviation should play a role.
 * Multiple atom types
 * Bonds, Angles etc.
 * Make TopoForceCategory
-* Parallelize 
+* Parallelize

@@ -61,6 +61,9 @@ class ForceCategory:
     matching code. Examples of categories are pairwise forces,
    threebody forces, topology forces (bonds, angles, etc).
    """
+
+    def __init__(self):
+        self.update_calls = 0
     
     def addForce(self, force):
         self.forces.append(force)
@@ -75,11 +78,46 @@ class ForceCategory:
         self._teardown()
 
     def update(self, ref_forces, u):
-        """Runs force matching update step"""
-        #update
+        """Runs stochastic gradient force matching update step"""
         self._setup_update(u)
-        for f in self.forces:            
-            f.update(ref_forces, u)
+
+        for p in range(self.passes):
+            net_df = 0
+            self.update_calls += 1
+
+            #sample particles and run updates on them 
+            for i in random.sample(range(u.atoms.numberOfAtoms()),u.atoms.numberOfAtoms()):
+                #calculate net forces deviation
+                df = ref_forces[i]
+                for f in self.forces:
+                    df -= f.calc_particle_force(i,u)
+                net_df += ln.norm(df)
+
+
+                code = """
+                       for(int i = 0; i < w_length; i++) {
+                           grad(i) = 0;
+                           for(int j = 0; j < 3; j++)
+                               grad(i) += temp_grad(i,j) * df(j);
+                       }
+                """
+
+                #now run gradient update step on all the force types
+                for f in self.forces:
+                    w_length = len(f.w)
+                    grad = f.w_grad
+                    temp_grad = f.temp_grad
+                    weave.inline(code, ['w_length', 'grad', 'df', 'temp_grad'],
+                         type_converters=converters.blitz,
+                         compiler = 'gcc')
+                    #the code which is being weaved:
+                    #grad = np.apply_along_axis(np.sum, 1, self.temp_grad * df)
+                    #apply any regularization
+                    for r in f.regularization:
+                        grad += r[0](f.w)
+                        f.lip +=  np.square(grad)
+                        f.w = f.w - f.eta * np.sqrt(f.passes) / np.sqrt(f.lip) * grad
+            print "log error = %g" % (0 if net_df < 1 else log(net_df))
         self._teardown_update()
 
 

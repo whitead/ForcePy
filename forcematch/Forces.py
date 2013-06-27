@@ -12,7 +12,9 @@ from scipy import weave
 from scipy.weave import converters
 
 class Force:
-    """Can calculate forces from a universe object
+    """Can calculate forces from a universe object.
+
+       To be used in the stochastic gradient step, a force should implement all of the methods here
     """
     
     def _register_hook(self, category):
@@ -21,7 +23,28 @@ class Force:
         self.category = category
         self.sample = np.arange(0)
 
-            
+    def _setup_update_params(w_dim):
+        self.w = np.zeros( len(mesh) )
+        self.temp_grad = np.zeros( (len(mesh), 3) )
+        self.w_grad = np.empty( len(mesh) )
+        self.regularization = []
+        self.lip = np.ones( np.shape(self.w) )
+        self.grad = np.zeros( np.shape(self.w) )
+        self.eta = 1
+
+    def add_regularizer(self, regularizer):
+        """Add regularization to the stochastic gradient descent
+           algorithm.
+        """
+        self.regularization.append((regularizer.grad_fxn, regularizer.reg_fxn))
+
+    def calc_forces(self, forces, u):
+        raise NotImplementedError("Must implement this function")
+
+    def calc_particle_force(self, forces, u):
+        raise NotImplementedError("Must implement this function")
+
+    
 
 
 class FileForce(Force):
@@ -33,15 +56,20 @@ class FileForce(Force):
 
     
     
-class PairwiseForce(Force):
-    """ A pairwise force that takes in a function for calculating the force. The function passed should
-    accept the scalar distance between the two particles as its first argument and any additional arguments
-    it requires should be passed after the function.
+class PairwiseAnalyticForce(Force):
+    """ A pairwise analtric force that takes in a function for
+    calculating the force. The function passed should accept the
+    scalar distance between the two particles as its first argument
+    and a scalar vector of length n for its second argument. The
+    gradient should take in the pairwise distance and a vector of
+    length n (as set in the constructor).  It should return a gradient
+    of length n.
     """
-    def __init__(self, f, *args):
+    def __init__(self, f, g, n, passes=1):
         self.call_force = f
-        self.call_force_args = args
-
+        self.call_grad = g
+        self.w = np.zero( n )
+        self._setup_update_params(n)
         
 
     def calc_forces(self, forces, u):
@@ -51,10 +79,45 @@ class PairwiseForce(Force):
             for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
                 r = positions[j] - positions[i]
                 d = ln.norm(r)
-                force = self.call_force(d,*self.call_force_args) * (r / d)
+                force = self.call_force(f,self.w) * (r / d)
                 forces[i] += force
             nlist_accum += self.category.nlist_lengths[i]
 
+    def calc_particle_force(self, forces, u):
+        positions = u.atoms.get_positions()
+        nlist_accum = np.sum(self.category.nlist_lengths[:i]) if i > 0  else 0
+        self.temp_force.fill(0)
+        self.temp_grad.fill(0)
+        #for weaving
+        w_length = len(self.w)
+        w = self.w
+        temp_grad = self.temp_grad
+        force = self.temp_force
+        for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
+            r = positions[j] - positions[i]
+            d = ln.norm(r)
+            r = r / d            
+            temp = self.call_force(d, self.w)
+            f_grad = self.call_grad(d, g)            
+            code = """
+                   #line 185 "Forces.py"
+     
+                   for(int i = 0; i < w_length; i++) {
+                       for(int j = 0; j < 3; j++) {
+                           force(j) += temp(i) * r(j);
+                           temp_grad(i,j) += f_grad(i) * r(j);
+                       }
+                    }
+                    """
+            weave.inline(code, ['w', 'w_length', 'temp', 'f_grad', 'r', 'force', 'temp_grad'],
+                         type_converters=converters.blitz,
+                         compiler = 'gcc')
+            #force += (self.w.dot(temp)  * r).reshape( (3,1) )
+            #self.temp_grad +=  np.asmatrix(temp.reshape((len(self.w), 1))) *  np.asmatrix(r)
+        return force
+    
+
+        
 
 class Regularizer:
     """grad_fxn: takes in vector returns gradient vector
@@ -64,12 +127,13 @@ class Regularizer:
         self.grad_fxn = grad_fxn
         self.reg_fxn = reg_fxn
 
+
 class SmoothRegularizer(Regularizer):
     """ sum_i (w_{i+1} - w{i}) ^ 2
     """
 
     def __init__(self):
-        raise Exception("Smoothregulizer is static and should be instanced")
+        raise Exception("Smoothregulizer is static and should not be instanced")
 
     @staticmethod
     def grad_fxn(x):
@@ -90,7 +154,7 @@ class L2Regularizer(Regularizer):
     """
 
     def __init__(self):
-        raise Exception("L2Regularizer is static and should be instanced")
+        raise Exception("L2Regularizer is static and should not be instanced")
 
     @staticmethod
     def grad_fxn(x):
@@ -111,71 +175,15 @@ class PairwiseSpectralForce(Force):
     defined as so: def unit_step(x, mesh, height)
     """
     
-    def __init__(self, mesh, updates_per_frame, f, *args):
+    def __init__(self, mesh, f, *args):
         self.call_basis = f
         self.call_basis_args = args
         self.mesh = mesh
         #create weights 
-        self.w = np.zeros( len(mesh) )
-        self.temp_grad = np.zeros( (len(mesh), 3) )
         self.temp_force = np.zeros( 3 )
-        self.w_grad = np.empty( len(mesh) )
-        self.regularization = []
+
         #if this is an updatable force, set up stuff for it
-        try:
-            self.lip = np.ones( np.shape(self.w) )
-            self.grad = np.zeros( np.shape(self.w) )
-            self.eta = 1
-        except AttributeError:
-            pass#not updatable. Oh well
-        self.index = 0
-        self.passes = updates_per_frame
-
-
-
-    def add_regularizer(self, regularizer):
-        """Add regularization to the stochastic gradient descent
-           algorithm.
-        """
-        self.regularization.append((regularizer.grad_fxn, regularizer.reg_fxn))
-
-
-    def update(self, ref_forces, u):
-
-        for p in range(self.passes):
-            net_df = 0
-            self.index += 1
-
-            if(self.index % 10 == 0):
-                self.plot("set_%d.png" % (self.index))
-                print "set_%d.png" % (self.index)
-
-            #stuff for weave
-            grad = self.w_grad
-            w_length = len(self.w)
-            temp_grad = self.temp_grad
-
-            #sample particles and run updates on them 
-            for i in random.sample(range(u.atoms.numberOfAtoms()),u.atoms.numberOfAtoms()):
-
-                df = self.calc_particle_force(i,u) - ref_forces[i]#get delta force in particle i
-                net_df += ln.norm(df)
-                code = """
-                       for(int i = 0; i < w_length; i++) {
-                           grad(i) = 0;
-                           for(int j = 0; j < 3; j++)
-                               grad(i) += temp_grad(i,j) * df(j);
-                       }
-                """
-                weave.inline(code, ['w_length', 'grad', 'df', 'temp_grad'],
-                         type_converters=converters.blitz,
-                         compiler = 'gcc')
-                #grad = np.apply_along_axis(np.sum, 1, self.temp_grad * df)
-                for r in self.regularization:
-                    grad += r[0](self.w)
-                self.lip +=  np.square(grad)
-                self.w = self.w - self.eta * np.sqrt(self.passes) / np.sqrt(self.lip) * grad
-            print "log error = %g" % (0 if net_df < 1 else log(net_df))
+        self._setup_update_params(len(mesh))
 
     
     def calc_forces(self, forces, u):        

@@ -16,8 +16,8 @@ class ForceMatch:
     """Main force match class.
     """
     
-    def __init__(self, input_file):
-        self.ref_force_cats = []
+    def __init__(self, input_file, ref_force_cat):
+        self.ref_force_cat = ref_force_cat
         self.tar_force_cats = []
         self._load_json(input_file)
     
@@ -38,19 +38,16 @@ class ForceMatch:
         for f in fcats:
             self.tar_force_cats.append(f)
 
-    def add_ref_force_cat(self, *fcats):
-        for f in fcats:
-            self.ref_force_cats.append(f)
+    def set_ref_force_cat(self, fcat):
+        self.ref_force_cat = fcat
         
     def force_match(self):
-
-        if(len(self.ref_force_cats) != len(self.tar_force_cats)):
-            raise RuntimeError("Must have same number of reference categories as target categories")
-
+        
         ref_forces = np.zeros( (self.u.atoms.numberOfAtoms(), 3) )
+
         for ts in self.u.trajectory:
-            for (rf, tf) in zip(self.ref_force_cats, self.tar_force_cats):
-                rf.calc_forces(ref_forces, self.u)
+            self.ref_force_cat.calc_forces(ref_forces, self.u)
+            for tf in self.tar_force_cats:
                 tf.update(ref_forces, self.u)
             ref_forces.fill(0)
             
@@ -92,9 +89,6 @@ class ForceCategory(object):
             net_df = 0
             self.update_calls += 1
 
-            #delete this!
-            self.forces[0].plot("%d.png" % self.update_calls)
-
             #sample particles and run updates on them 
             for i in random.sample(range(u.atoms.numberOfAtoms()),u.atoms.numberOfAtoms()):
                 #calculate net forces deviation
@@ -108,7 +102,7 @@ class ForceCategory(object):
                        for(int i = 0; i < w_length; i++) {
                            grad(i) = 0;
                            for(int j = 0; j < 3; j++)
-                               grad(i) += temp_grad(i,j) * df(j);
+                               grad(i) -= temp_grad(i,j) * df(j); //negative due to df being switched
                        }
                 """
 
@@ -125,8 +119,7 @@ class ForceCategory(object):
                     #grad = np.apply_along_axis(np.sum, 1, self.temp_grad * df)
                     #apply any regularization
                     for r in f.regularization:
-                        grad += r.grad_fxn(f.w)
-
+                        grad += r[0](f.w)
                     f.lip +=  np.square(grad)
                     f.w = f.w - f.eta * np.sqrt(self.passes) / np.sqrt(f.lip) * grad
             print "log error = %g" % (0 if net_df < 1 else log(net_df))
@@ -141,8 +134,8 @@ class NeighborList:
         
         #set up cell number and data
         self.cutoff = cutoff
-        #self.box = [(0,x) for x in u.dimensions[:3]]
-        self.box = [(0,5.2) for x in u.dimensions[:3]]
+        self.box = [(0,x) for x in u.dimensions[:3]]
+        #self.box = [(0,5.2) for x in u.dimensions[:3]]
         self.nlist_lengths = np.arange(0, dtype='int32')
         self.nlist = np.arange(0, dtype='int32')
         self.cell_number = [max(1,int(ceil((x[1] - x[0]) / self.cutoff))) for x in self.box]        

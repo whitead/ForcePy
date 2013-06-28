@@ -23,20 +23,23 @@ class Force(object):
         self.category = category
         self.sample = np.arange(0)
 
-    def _setup_update_params(self, w_dim):
-        self.w = np.zeros( w_dim )
-        self.temp_grad = np.zeros( (w_dim, 3) )
+    def _setup_update_params(self, w_dim, initial_height=5):
+        self.w = initial_height * np.ones( w_dim )
+        self.temp_grad = np.empty( (w_dim, 3) )
+        self.temp_force = np.empty( 3 )
         self.w_grad = np.empty( w_dim )
         self.regularization = []
         self.lip = np.ones( np.shape(self.w) )
         self.grad = np.zeros( np.shape(self.w) )
         self.eta = 1
 
-    def add_regularizer(self, regularizer):
+
+    def add_regularizer(self, *regularizers):
         """Add regularization to the stochastic gradient descent
            algorithm.
         """
-        self.regularization.append((regularizer.grad_fxn, regularizer.reg_fxn))
+        for r in regularizers:
+            self.regularization.append((r.grad_fxn, r.reg_fxn))
 
     def calc_forces(self, forces, u):
         raise NotImplementedError("Must implement this function")
@@ -83,38 +86,22 @@ class PairwiseAnalyticForce(Force):
             nlist_accum += self.category.nlist_lengths[i]
 
 
-    def calc_particle_force(self, forces, u):
+    def calc_particle_force(self, i, u):
         positions = u.atoms.get_positions()
         nlist_accum = np.sum(self.category.nlist_lengths[:i]) if i > 0  else 0
         self.temp_force.fill(0)
         self.temp_grad.fill(0)
         #for weaving
         w_length = len(self.w)
-        w = self.w
         temp_grad = self.temp_grad
-        force = self.temp_force
         for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
             r = positions[j] - positions[i]
             d = ln.norm(r)
             r = r / d            
-            temp = self.call_force(d, self.w)
-            f_grad = self.call_grad(d, g)            
-            code = """
-                   #line 185 "Forces.py"
-     
-                   for(int i = 0; i < w_length; i++) {
-                       for(int j = 0; j < 3; j++) {
-                           force(j) += temp(i) * r(j);
-                           temp_grad(i,j) += f_grad(i) * r(j);
-                       }
-                    }
-                    """
-            weave.inline(code, ['w', 'w_length', 'temp', 'f_grad', 'r', 'force', 'temp_grad'],
-                         type_converters=converters.blitz,
-                         compiler = 'gcc')
-            #force += (self.w.dot(temp)  * r).reshape( (3,1) )
-            #self.temp_grad +=  np.asmatrix(temp.reshape((len(self.w), 1))) *  np.asmatrix(r)
-        return force
+            self.temp_force += self.call_force(d, self.w) * r
+            f_grad = self.call_grad(d, self.w)            
+            self.temp_grad +=  np.outer(f_grad, r)
+        return self.temp_force
     
 
 class LJForce(PairwiseAnalyticForce):
@@ -127,11 +114,33 @@ class LJForce(PairwiseAnalyticForce):
         
     @staticmethod
     def lj(d, w):
-        return 4 * w[0] * (6 * (d / w[1]) ** 7 - 12 * (d / w[1]) ** 13)
+        return 4 * w[0] * (6 * (w[1] / d) ** 7 - 12 * (w[1] / d) ** 13)
 
     @staticmethod
     def dlj(d, w):
-        return 4 * (6 * (d / w[1]) ** 7 - 12 * (d / w[1]) ** 13), 4 * w[0] * (42 * (d / w[1]) ** 6 - 156 * (d / w[1]) ** 12)
+        return np.asarray([4 * (6 * (w[1] / d) ** 7 - 12 * (w[1] / d) ** 13), 4 * w[0] * (42 * (w[1] / d) ** 6 - 156 * (w[1] / d) ** 12)])
+
+    def plot(self, outfile, alt=None):
+        mesh = UniformMesh(0, max(5,self.w[0] * 3), 0.01)
+        force = np.empty( len(mesh) )
+        if(not alt is None):
+            alt_force = np.empty( len(mesh) )
+        x = np.empty( np.shape(force) )
+        for i in range(len(force)):
+            x[i] = (mesh[i] + mesh[i + 1]) / 2.
+            force[i] = LJForce.lj(x[i], self.w)
+            if(not alt is None):
+                alt_force[i] = LJForce.lj(x[i], alt)
+        fig = plt.figure(figsize=(8, 6), dpi=80)
+        ax = plt.subplot(1,1,1)
+        ax.plot(x, force, color="blue")
+        if(not alt is None): 
+            ax.plot(x, alt_force, color="red")
+        ax.axis([min(x), max(x), min(-1, self.w[1] * -2), max(1, self.w[1] * 5)])
+        fig.tight_layout()
+        plt.savefig(outfile)
+                                  
+
 
 class Regularizer:
     """grad_fxn: takes in vector returns gradient vector
@@ -227,7 +236,7 @@ class PairwiseSpectralForce(Force):
             r = r / d
             temp = self.call_basis(d, self.mesh, *self.call_basis_args)
             code = """
-                   #line 185 "Forces.py"
+                   #line 255 "Forces.py"
      
                    for(int i = 0; i < w_length; i++) {
                        for(int j = 0; j < 3; j++) {
@@ -239,7 +248,8 @@ class PairwiseSpectralForce(Force):
             weave.inline(code, ['w', 'w_length', 'temp', 'r', 'force', 'temp_grad'],
                          type_converters=converters.blitz,
                          compiler = 'gcc')
-            #self.temp_grad +=  np.asmatrix(temp.reshape((len(self.w), 1))) *  np.asmatrix(r)
+            #forces +=  temp * r
+            #self.temp_grad +=  np.outer(temp, r)
         return force
     
 
@@ -247,18 +257,14 @@ class PairwiseSpectralForce(Force):
     def plot(self, outfile):
         mesh = UniformMesh(self.mesh.min(), self.mesh.max(), self.mesh.dx / 2)
         force = np.empty( len(mesh) )
-        true_force = np.empty( len(mesh))
         x = np.empty( np.shape(force) )
         for i in range(len(force)):
             x[i] = (mesh[i] + mesh[i + 1]) / 2.
             force[i] = self.w * np.asmatrix(self.call_basis(x[i], self.mesh, *self.call_basis_args).reshape((len(self.w), 1)))
-            true_force[i] = 4 * (6 * x[i]**(-7) - 12 * x[i] ** (-13) )
         fig = plt.figure(figsize=(8, 6), dpi=80)
         ax = plt.subplot(1,1,1)
         ax.plot(x, force, color="blue")
-        ax.plot(x, true_force, color="red")
-        #ax.axis([min(x), max(x), -max(force), max(force)])
-        ax.axis([min(x), max(x), -5, 5])
+        ax.axis([min(x), max(x), min(min(force), -max(force)), max(force)])
         fig.tight_layout()
         plt.savefig(outfile)
                                   

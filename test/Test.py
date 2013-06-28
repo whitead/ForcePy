@@ -6,14 +6,15 @@ def unit_step(x, mesh):
     result[mesh.mesh_index(x)] = 1
     return result
 
-fm = ForceMatch("test/test.json")
-ref_pcat = Pairwise()
+
+ref_pcat = Pairwise(5)
 tar_pcat = Pairwise(5)
 ref_pcat.addForce(LJForce())
+fm = ForceMatch("test/test.json", ref_pcat)
 #ref_pcat.addForce(FileForce())
-pwf = PairwiseSpectralForce(UniformMesh(0,5,0.25), unit_step)
-#pwf.add_regularizer(SmoothRegularizer)
+#pwf = PairwiseSpectralForce(UniformMesh(0,12,0.1), unit_step)
+pwf = LJForce(sigma=1.5, epsilon=0.9)
+#pwf.add_regularizer(SmoothRegularizer, L2Regularizer)
 tar_pcat.addForce(pwf)
 fm.add_tar_force_cat(tar_pcat)
-fm.add_ref_force_cat(ref_pcat)
 fm.force_match()

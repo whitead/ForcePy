@@ -84,6 +84,8 @@ class ForceCategory(object):
         """Runs stochastic gradient force matching update step"""
         self._setup_update(u)
 
+        self.forces[0].plot("%d" % self.update_calls)
+
         #allow multiple passes over the same trajectory frame
         for p in range(self.passes):
             net_df = 0

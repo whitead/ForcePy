@@ -46,6 +46,7 @@ class ForceMatch:
         ref_forces = np.zeros( (self.u.atoms.numberOfAtoms(), 3) )
 
         for ts in self.u.trajectory:
+            print "next frame"
             self.ref_force_cat.calc_forces(ref_forces, self.u)
             for tf in self.tar_force_cats:
                 tf.update(ref_forces, self.u)

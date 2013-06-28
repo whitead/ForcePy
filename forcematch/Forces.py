@@ -31,7 +31,7 @@ class Force(object):
         self.regularization = []
         self.lip = np.ones( np.shape(self.w) )
         self.grad = np.zeros( np.shape(self.w) )
-        self.eta = 1
+        self.eta = initial_height * 2
 
 
     def add_regularizer(self, *regularizers):

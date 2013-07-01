@@ -1,5 +1,5 @@
-from ForceMatch import *
-from Mesh import *
+from .ForceMatch import Pairwise 
+from .Mesh import UniformMesh 
 
 import numpy as np
 import random
@@ -17,12 +17,6 @@ class Force(object):
        To be used in the stochastic gradient step, a force should implement all of the methods here
     """
     
-    def _register_hook(self, category):
-        """Register the force with the category and keep a reference to it
-        """
-        self.category = category
-        self.sample = np.arange(0)
-
     def _setup_update_params(self, w_dim, initial_height=5):
         self.w = initial_height * np.ones( w_dim )
         self.temp_grad = np.empty( (w_dim, 3) )
@@ -47,8 +41,12 @@ class Force(object):
     def calc_particle_force(self, forces, u):
         raise NotImplementedError("Must implement this function")
 
-    
 
+    def get_category(self):
+        try:
+            return self.category
+        except AttributeError:
+            return None
 
 class FileForce(Force):
     """ Reads forces from the trajectory file
@@ -57,8 +55,7 @@ class FileForce(Force):
     def calc_forces(self, forces, u):
         forces[:] = u.trajectory.ts._forces
 
-    
-    
+
 class PairwiseAnalyticForce(Force):
     """ A pairwise analtric force that takes in a function for
     calculating the force. The function passed should accept the
@@ -68,11 +65,13 @@ class PairwiseAnalyticForce(Force):
     length n (as set in the constructor).  It should return a gradient
     of length n.
     """
-    def __init__(self, f, g, n):
+
+    def __init__(self, f, g, n, cutoff):
         self.call_force = f
         self.call_grad = g
         self.w = np.zeros( n )
-        self._setup_update_params(n)
+        self._setup_update_params(n)        
+        self.category = Pairwise.get_instance(cutoff)
         
 
     def calc_forces(self, forces, u):
@@ -107,10 +106,11 @@ class PairwiseAnalyticForce(Force):
 class LJForce(PairwiseAnalyticForce):
     """ Lennard jones pairwise analytic force
     """
-    def __init__(self, sigma=1, epsilon=1):
+    def __init__(self, cutoff, sigma=1, epsilon=1):
         super(LJForce, self).__init__(LJForce.lj, LJForce.dlj, 2)
         self.w[0] = epsilon
         self.w[1] = sigma
+        self.category = Pairwise.get_instance(cutoff)
         
     @staticmethod
     def lj(d, w):
@@ -204,6 +204,7 @@ class PairwiseSpectralForce(Force):
         self.mesh = mesh
         #create weights 
         self.temp_force = np.zeros( 3 )
+        self.category = Pairwise.get_instance(mesh.max())
 
         #if this is an updatable force, set up stuff for it
         self._setup_update_params(len(mesh))

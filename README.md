@@ -15,6 +15,15 @@ Implemented Features
 * Neighborlist
 
 
+Architecture Notes
+==================
+The main class to utilize is a `ForceMatch` class. This class takes in one or more reference `Force` objects
+that define the forces to match. For example, a `FileForce` will read in forces from a file. The
+`ForceMatch` class also takes one or more target `Force` objects, which are the functional forms that are 
+going to match the reference forces. Some `Force` objects contain a static class variable that points
+to a `ForceCategory` that contains useful methods/variables. For example, the `PairwiseCategory` contains
+a neighborlist implementation.
+
 
 Meshes
 ============

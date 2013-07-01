@@ -26,7 +26,33 @@ class Force(object):
         self.lip = np.ones( np.shape(self.w) )
         self.grad = np.zeros( np.shape(self.w) )
         self.eta = initial_height * 2
+        self.sel1 = None
+        self.sel2 = None
 
+    #In case the force needs access to the universe, override (and call this method).
+    def setup_hook(self, u):
+        self._build_mask(self.sel1, self.sel2, u)
+
+    def specialize_types(self, selection_pair_1 = None, selection_pair_2 = None):
+        self.sel1 = selection_pair_1
+        self.sel2 = selection_pair_2
+
+
+    def _build_mask(self, sel1, sel2, u):
+        if(sel1 is None):
+            self.mask1 = [True for x in range(u.atoms.numberOfAtoms())]
+        else:
+            self.mask1 = [False for x in range(u.atoms.numberOfAtoms())]
+            for a in u.selectAtoms(sel1):
+                self.mask1[a.number] = True
+            
+        if(sel2 is None):
+            self.mask2 = self.mask1
+        else:
+            self.mask2 = [False for x in range(u.atoms.numberOfAtoms())]
+            for a in u.selectAtoms(sel2):
+                self.mask2[a.number] = True
+                          
 
     def add_regularizer(self, *regularizers):
         """Add regularization to the stochastic gradient descent
@@ -38,15 +64,13 @@ class Force(object):
     def calc_forces(self, forces, u):
         raise NotImplementedError("Must implement this function")
 
-    def calc_particle_force(self, forces, u):
+    def calc_particle_force(self, i, u):
         raise NotImplementedError("Must implement this function")
 
-
-    def get_category(self):
-        try:
-            return self.category
-        except AttributeError:
-            return None
+    def clone_force(self):
+        """Instantiates a new Force, with a reference to the same mesh. 
+        """
+        raise NotImplementedError("Must implement this function")        
 
 class FileForce(Force):
     """ Reads forces from the trajectory file
@@ -64,6 +88,8 @@ class PairwiseAnalyticForce(Force):
     gradient should take in the pairwise distance and a vector of
     length n (as set in the constructor).  It should return a gradient
     of length n.
+    
+    This force correctly handles types.
     """
 
     def __init__(self, f, g, n, cutoff):
@@ -72,13 +98,28 @@ class PairwiseAnalyticForce(Force):
         self.w = np.zeros( n )
         self._setup_update_params(n)        
         self.category = Pairwise.get_instance(cutoff)
-        
+
+
+    def clone_force(self):
+        copy = PairwiseAnalyticForce(self.call_force, self.call_grad, len(self.w), self.category.cutoff)
+        return copy
+                                     
 
     def calc_forces(self, forces, u):
+        
         positions = u.atoms.get_positions()
         nlist_accum = 0
         for i in range(u.atoms.numberOfAtoms()):
+            #check atom types
+            if(self.mask1[i]):
+                maskj = self.mask2
+            elif(self.mask2[i]):
+                maskj = self.mask1
+            else:
+                continue
             for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
+                if(not maskj[j]):
+                    continue
                 r = positions[j] - positions[i]
                 d = ln.norm(r)
                 forces[i] += self.call_force(d,self.w) * (r / d)
@@ -86,14 +127,25 @@ class PairwiseAnalyticForce(Force):
 
 
     def calc_particle_force(self, i, u):
-        positions = u.atoms.get_positions()
-        nlist_accum = np.sum(self.category.nlist_lengths[:i]) if i > 0  else 0
+
         self.temp_force.fill(0)
         self.temp_grad.fill(0)
+
+        if(self.mask1[i]):
+            maskj = self.mask2
+        elif(self.mask2[i]):
+            maskj = self.mask1
+        else:
+            return self.temp_force
+
+        positions = u.atoms.get_positions()
+        nlist_accum = np.sum(self.category.nlist_lengths[:i]) if i > 0  else 0
         #for weaving
         w_length = len(self.w)
         temp_grad = self.temp_grad
         for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
+            if(not self.mask2[j]):
+                continue
             r = positions[j] - positions[i]
             d = ln.norm(r)
             r = r / d            
@@ -191,11 +243,12 @@ class L2Regularizer(Regularizer):
 
 class PairwiseSpectralForce(Force):
     """A pairwise force that is a linear combination of basis functions
-
     The basis function should take two arguments: the distance and the
     mesh. Additional arguments after the function pointer will be
     passed after the two arguments. For example, the function may be
-    defined as so: def unit_step(x, mesh, height)
+    defined as so: def unit_step(x, mesh, height).
+
+    This force correctly implements pairtypes
     """
     
     def __init__(self, mesh, f, *args):
@@ -208,13 +261,27 @@ class PairwiseSpectralForce(Force):
 
         #if this is an updatable force, set up stuff for it
         self._setup_update_params(len(mesh))
+        
 
+    def clone_force(self):
+        copy = PairwiseSpectralForce(self.mesh, self.call_basis, self.call_basis_args)
+        return copy
+        
     
     def calc_forces(self, forces, u):        
         positions = u.atoms.get_positions()
         nlist_accum = 0        
         for i in range(u.atoms.numberOfAtoms()):
+            #check to if this is a valid type
+            if(self.mask1[i]):
+                maskj = self.mask2
+            elif(self.mask2[i]):
+                maskj = self.mask1
+            else:
+                continue
             for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
+                if(not maskj[i]):
+                    continue
                 r = positions[j] - positions[i]
                 d = ln.norm(r)
                 force = self.w.dot(self.call_basis(d, self.mesh, *self.call_basis_args)) * (r / d)
@@ -222,16 +289,33 @@ class PairwiseSpectralForce(Force):
             nlist_accum += self.category.nlist_lengths[i]
 
     def calc_particle_force(self, i, u):
-        positions = u.atoms.get_positions()
-        nlist_accum = np.sum(self.category.nlist_lengths[:i]) if i > 0  else 0
+
         self.temp_force.fill(0)
         self.temp_grad.fill(0)
+
+        #check type
+        if(self.mask1[i]):
+            maskj = self.mask2
+        elif(self.mask2[i]):
+            maskj = self.mask1
+        else:
+            return self.temp_force
+
+
+        positions = u.atoms.get_positions()
+        nlist_accum = np.sum(self.category.nlist_lengths[:i]) if i > 0  else 0
+
         #needed for weaving code
         w_length = len(self.w)
         w = self.w
         temp_grad = self.temp_grad
         force = self.temp_force
         for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
+            
+            if(not maskj[j]):
+                print" INVALID"
+                continue
+
             r = positions[j] - positions[i]
             d = ln.norm(r)
             r = r / d

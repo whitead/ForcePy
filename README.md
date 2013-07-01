@@ -24,6 +24,19 @@ going to match the reference forces. Some `Force` objects contain a static class
 to a `ForceCategory` that contains useful methods/variables. For example, the `PairwiseCategory` contains
 a neighborlist implementation.
 
+The `PairwiseSpectralForce` is a linear combination of basis
+functions. 
+
+A given `Force` may be 'specialized' to work on only a certain type or
+type pair. This may be done by calling `specialize_type` before it is
+added to a `ForceMatch` class. Another point is in the fact that the
+gradients don't depend on the weights for the `PairwiseSpectralForce`
+force.
+
+In order to simplify constructing potentials for many type pairs,
+there are utility functions on the ForceMatch class to construct all
+possible pairs.
+
 
 Meshes
 ============

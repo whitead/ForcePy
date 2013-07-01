@@ -39,6 +39,7 @@ class ForceMatch:
             cat = f.get_category()
             if(not (cat is None)):
                 self.tar_cats.append(cat)
+            f.setup_hook(self.u)
 
     def add_ref_force(self, *forces):
         for f in forces:
@@ -47,6 +48,7 @@ class ForceMatch:
             if(not (cat is None)):
                 self.ref_cats.append(cat)
 
+    
         
     def force_match(self):
         

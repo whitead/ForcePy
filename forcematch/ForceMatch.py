@@ -117,8 +117,16 @@ class ForceMatch:
             self._teardown()
 
 
-
-
+    def add_and_type_pair(self, force):
+        types = []
+        for a in self.u.atoms:
+            if(not a.type in types):
+                types.append(a.type)
+        for i in range(len(types)):
+            for j in range(i,len(types)):
+                f = force.clone_force()
+                f.specialize_types("type %s" % types[i], "type %s" % types[j])
+                self.add_tar_force(f)
             
     def _setup(self):
         for rfcat in self.ref_cats:

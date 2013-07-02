@@ -33,6 +33,14 @@ class Force(object):
     def setup_hook(self, u):
         self._build_mask(self.sel1, self.sel2, u)
 
+    def get_category(self):
+        try:
+            return self.category
+        except AttributeError:
+            pass
+
+        return None
+
     def specialize_types(self, selection_pair_1 = None, selection_pair_2 = None):
         self.sel1 = selection_pair_1
         self.sel2 = selection_pair_2

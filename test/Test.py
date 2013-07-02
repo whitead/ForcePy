@@ -6,7 +6,6 @@ def unit_step(x, mesh):
     result[mesh.mesh_index(x)] = 1
     return result
 
-
 fm = ForceMatch("test/methanol.json")
 ff = FileForce()
 pwf = PairwiseSpectralForce(UniformMesh(0,12,0.1), unit_step)

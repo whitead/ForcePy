@@ -14,6 +14,11 @@ class UniformMesh:
 
     def min(self):
         return self.l
+    
+    def integrate(self, f, *args):
+        #trapezoidal integration
+        for i in range(len(self) - 1):
+            
 
     def mesh_index(self, x):
         return max(0, min(self.length - 1, int(floor( (x - self.l) / self.dx) )))

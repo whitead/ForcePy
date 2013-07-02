@@ -255,11 +255,9 @@ class PairwiseSpectralForce(Force):
     mesh. Additional arguments after the function pointer will be
     passed after the two arguments. For example, the function may be
     defined as so: def unit_step(x, mesh, height).
-
-    This force correctly implements pairtypes
     """
     
-    def __init__(self, mesh, f, *args):
+    def __init__(self, mesh, f, g, *args):
         self.call_basis = f
         self.call_basis_args = args
         self.mesh = mesh
@@ -275,6 +273,30 @@ class PairwiseSpectralForce(Force):
         copy = PairwiseSpectralForce(self.mesh, self.call_basis, self.call_basis_args)
         return copy
         
+
+    def calc_potential(self, u):
+        positions = u.atoms.get_positions()
+        nlist_accum = 0        
+        potential = 0
+        self.temp_grad.fill(0)
+        for i in range(u.atoms.numberOfAtoms()):
+            #check to if this is a valid type
+            if(self.mask1[i]):
+                maskj = self.mask2
+            elif(self.mask2[i]):
+                maskj = self.mask1
+            else:
+                continue
+            for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
+                if(not maskj[i]):
+                    continue
+                r = positions[j] - positions[i]
+                d = ln.norm(r)
+                temp = self.call_basis(d, self.mesh, *self.call_basis_args)
+                potential += self.w.dot(temp)
+                self.temp_grad[,1] += temp
+            nlist_accum += self.category.nlist_lengths[i]
+
     
     def calc_forces(self, forces, u):        
         positions = u.atoms.get_positions()

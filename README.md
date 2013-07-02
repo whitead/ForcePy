@@ -35,7 +35,36 @@ force.
 
 In order to simplify constructing potentials for many type pairs,
 there are utility functions on the ForceMatch class to construct all
-possible pairs.
+possible pairs. `add_and_type_pairs` copies a force as many times as
+needed to have a unique force for every possible pair-pair
+interaction.
+
+Observable Variable
+===============
+
+The target forcefield/potential may be modified to reproduce some
+observable parameter.  The observable should be in a tabular file
+containing the total energy of the system at each frame in Column
+1. Columns 2 and beyond should be the deviation of the observable. The
+algorithm will try to minimize the observable. The observable under the
+new forcefied will be sum_i O_i * exp(-(U' - U) * beta), where U' is
+the new potential. The gradient at each frame will be -beta * U' *
+exp(-(U' - U) * beta). The meshes implment integrated forms for
+working with potentials. This gradient, by the way, isn't correct
+since the derivative of the normalization constant changes. It reamins
+to be shown that this gradient is an unbiased estimator. You should do
+that.
+
+We now need the U' derivative wrt to weights. It's the integrated
+basis function. Except, there is a problem that we're working per
+particle. You'll need to work on the math for that one. I'm guessing
+that I can sub in the average energy per particle. No, that won't work
+due the exponential. For the now the only idea I've got is to
+calculate total energy at each frame. 
+
+What needs to be done for this section: Figure out how to calculate
+the potentials given the forces. DONE. Now what needs to be done: Figure
+out how to integrate over the potentials. Should be done by adding
 
 
 Meshes
@@ -53,8 +82,8 @@ Forces
 
 TODO
 ==========
-* Need to separate update code out of individual forces, since the net force deviation should play a role.
-* Multiple atom types
 * Bonds, Angles etc.
-* Make TopoForceCategory
+* Make TopoForceCategory. Why? No.
 * Parallelize
+* Think about analytical forms
+* 

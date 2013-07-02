@@ -25,10 +25,22 @@ class ForceMatch:
             self.json = json.load(f)
         self._test_json(self.json)
         self.u = Universe(self.json["structure"], str(self.json["trajectory"]))
-        
+        self.kt = self.json["kT"]
+        if("observable" in self.json):
+            self.do_obs = True
+            self.energy = [0 for x in self.u.trajectory.numframes]
+            self.obs = [0 for x in self.u.trajcetory.numframes]
+            with f as open(self.json["observable"], 'r'):
+                lines = f.readlines()
+                if(len(lines) != len(self.energy)):
+                    raise RunTimeError("Number of the frames does not match number of lines in observation file")
+                for i, line in zip(range(len(lines)), lines):
+                    self.energy[i] = float(lines.split()[0])
+                    self.observable[i] = float(lines.split()[1])
 
                 
-    def _test_json(self, json, required_keys = [("structure", "Toplogy file"), ("trajectory", "Trajectory File")]):
+                
+    def _test_json(self, json, required_keys = [("structure", "Toplogy file"), ("trajectory", "Trajectory File"), ("kT", "Boltzmann's constant times temperature")]):
         for rk in required_keys:
             if(not json.has_key(rk[0])):
                 raise IOError("Error in input file, could not find %s" % rk[1])
@@ -59,7 +71,7 @@ class ForceMatch:
             self._setup()
 
             for rf in self.ref_forces:
-                rf.calc_forces(ref_forces, self.u)
+                rf.calc_forces(ref_forces, self.u)            
 
             #make plots
             for f in self.tar_forces:
@@ -80,6 +92,7 @@ class ForceMatch:
                 for f in self.tar_forces:
                     df -= f.calc_particle_force(i,self.u)
                 net_df += ln.norm(df)
+
 
                 #inline C code to accumulate gradient
                 code = """
@@ -110,6 +123,23 @@ class ForceMatch:
                     f.w = f.w - f.eta / np.sqrt(f.lip) * grad
             #log of the error
             print "log error = %g" % (0 if net_df < 1 else log(net_df))
+
+            #now, we work on matching the obs if we're trying to match it
+            if(self.obs):
+                #get energy deviation first
+                energy = 0
+                for f in self.tar_forces:
+                    energy += f.calc_potential(self.u)
+                #now calculate prefactor
+                prefactor = -energy / self.kT * exp(- (energy  - self.energy[self.u.trajectory.frame - 1]) / self.kT)
+                prefactor *= self.obs[self.u.trajectory.frame - 1]
+                
+                #now update the weights
+                for f in self.tar_forces:
+                    grad = prefactor * f.temp_grad[,1]
+                    f.lip += np.square(grad)
+                    #we augment the learning rate, since this update only happens once per time frame 
+                    f.w = f.w - f.eta * (u.atoms.numberOfAtoms()) / np.sqrt(f.lip) * grad
 
             #re-zero reference forces
             ref_forces.fill(0)

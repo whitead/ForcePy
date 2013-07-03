@@ -78,7 +78,6 @@ class ForceMatch:
                 self.u.trajectory.ts._unitcell[0] = self.json["box"][0]
                 self.u.trajectory.ts._unitcell[2] = self.json["box"][1]
                 self.u.trajectory.ts._unitcell[5] = self.json["box"][2]
-                print self.u.dimensions[:3]
 
             self._setup()
 
@@ -143,15 +142,23 @@ class ForceMatch:
                 for f in self.tar_forces:
                     energy += f.calc_potential(self.u)
                 #now calculate prefactor
-                prefactor = -energy / self.kt * exp(- (energy  - self.energy[self.u.trajectory.frame - 1]) / self.kt)
+                exponent = (self.energy[self.u.trajectory.frame - 1] - energy) / self.kt
+                print exponent
+                if(exponent > 0):
+                    prefactor = -energy / self.kt
+                else:
+                    prefactor = -energy / self.kt * exp(exponent)
+                #prefactor = -energy / self.kt * exp( (energy  - self.energy[self.u.trajectory.frame - 1]) / self.kt)
                 prefactor *= self.obs[self.u.trajectory.frame - 1]
                 
                 #now update the weights
                 for f in self.tar_forces:
                     grad = prefactor * f.temp_grad[:,1]
+                    print "e grad:"
+                    print grad
                     f.lip += np.square(grad)
                     #we augment the learning rate, since this update only happens once per time frame 
-                    f.w = f.w - f.eta * (u.atoms.numberOfAtoms()) / np.sqrt(f.lip) * grad
+                    f.w = f.w - f.eta * (self.u.atoms.numberOfAtoms()) / np.sqrt(f.lip) * grad
 
             #re-zero reference forces
             ref_forces.fill(0)

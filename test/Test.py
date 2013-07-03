@@ -7,11 +7,11 @@ def unit_step(x, mesh):
     return result
 
 def int_unit_step(x, mesh):
-    result = np.zeroes(len(mesh))
+    result = np.zeros(len(mesh))
     mesh_point = mesh.mesh_index(x)
-    for i in range(mesh_point):
-        result[i] = i + 0.5
-    result[mesh_point] = x - mesh[mesh_point]
+    for i in range(len(mesh) - 1, mesh_point, -1):
+        result[i] = len(mesh) - i - 0.5
+    result[mesh_point] = x - mesh[mesh_point] + result[mesh_point]
     return result
     
 

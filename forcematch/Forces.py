@@ -269,7 +269,7 @@ class PairwiseSpectralForce(Force):
         self._setup_update_params(len(mesh))
         
     def clone_force(self):
-        copy = PairwiseSpectralForce(self.mesh, self.call_basis, self.call_basis_args)
+        copy = PairwiseSpectralForce(self.mesh, self.call_basis, *self.call_basis_args)
         if(not self.call_potential is None):
             copy.call_potential = self.call_potential
         return copy
@@ -305,6 +305,7 @@ class PairwiseSpectralForce(Force):
                 potential += self.w.dot(temp)
                 self.temp_grad[:,1] += temp
             nlist_accum += self.category.nlist_lengths[i]
+        return potential
 
     
     def calc_forces(self, forces, u):        

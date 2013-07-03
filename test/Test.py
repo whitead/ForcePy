@@ -6,9 +6,20 @@ def unit_step(x, mesh):
     result[mesh.mesh_index(x)] = 1
     return result
 
-fm = ForceMatch("test/methanol.json")
-ff = FileForce()
-pwf = PairwiseSpectralForce(UniformMesh(0,12,0.1), unit_step)
+def int_unit_step(x, mesh):
+    result = np.zeroes(len(mesh))
+    mesh_point = mesh.mesh_index(x)
+    for i in range(mesh_point):
+        result[i] = i + 0.5
+    result[mesh_point] = x - mesh[mesh_point]
+    return result
+    
+
+fm = ForceMatch("test/lj.json")
+#ff = FileForce()
+ff = LJForce(5)
+pwf = PairwiseSpectralForce(UniformMesh(0,5,0.1), unit_step)
+pwf.set_potential(int_unit_step)
 #pwf = LJForce(sigma=1.5, epsilon=0.9)
 #pwf.add_regularizer(SmoothRegularizer, L2Regularizer)
 fm.add_ref_force(ff)

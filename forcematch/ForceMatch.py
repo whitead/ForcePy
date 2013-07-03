@@ -6,7 +6,7 @@ from math import ceil
 from MDAnalysis import Universe
 from scipy import weave
 from scipy.weave import converters
-from math import ceil, log
+from math import ceil, log, exp
 
 class ForceMatch:
     """Main force match class.
@@ -28,15 +28,18 @@ class ForceMatch:
         self.kt = self.json["kT"]
         if("observable" in self.json):
             self.do_obs = True
-            self.energy = [0 for x in self.u.trajectory.numframes]
-            self.obs = [0 for x in self.u.trajcetory.numframes]
-            with f as open(self.json["observable"], 'r'):
+            self.energy = [0 for x in range(self.u.trajectory.numframes)]
+            self.obs = [0 for x in range(self.u.trajectory.numframes)]
+            with open(self.json["observable"], 'r') as f:
                 lines = f.readlines()
                 if(len(lines) != len(self.energy)):
                     raise RunTimeError("Number of the frames does not match number of lines in observation file")
                 for i, line in zip(range(len(lines)), lines):
-                    self.energy[i] = float(lines.split()[0])
-                    self.observable[i] = float(lines.split()[1])
+                    self.energy[i] = float(line.split()[0])
+                    self.obs[i] = float(line.split()[1])
+        if("box" in self.json):
+            if(len(self.json["box"]) != 3):
+                raise IOError("Input file JSON: box must look like \"box\":[5,5,5]. It must have 3 dimensions in an array")
 
                 
                 
@@ -59,6 +62,7 @@ class ForceMatch:
             cat = f.get_category()
             if(not (cat is None)):
                 self.ref_cats.append(cat)
+            f.setup_hook(self.u)
 
     
         
@@ -66,7 +70,15 @@ class ForceMatch:
         
         ref_forces = np.zeros( (self.u.atoms.numberOfAtoms(), 3) )
 
-        for ts in self.u.trajectory:            
+        for ts in self.u.trajectory:
+            
+            #set box if necessary
+            if("box" in self.json):
+                #strange ordering due to charm
+                self.u.trajectory.ts._unitcell[0] = self.json["box"][0]
+                self.u.trajectory.ts._unitcell[2] = self.json["box"][1]
+                self.u.trajectory.ts._unitcell[5] = self.json["box"][2]
+                print self.u.dimensions[:3]
 
             self._setup()
 
@@ -131,12 +143,12 @@ class ForceMatch:
                 for f in self.tar_forces:
                     energy += f.calc_potential(self.u)
                 #now calculate prefactor
-                prefactor = -energy / self.kT * exp(- (energy  - self.energy[self.u.trajectory.frame - 1]) / self.kT)
+                prefactor = -energy / self.kt * exp(- (energy  - self.energy[self.u.trajectory.frame - 1]) / self.kt)
                 prefactor *= self.obs[self.u.trajectory.frame - 1]
                 
                 #now update the weights
                 for f in self.tar_forces:
-                    grad = prefactor * f.temp_grad[,1]
+                    grad = prefactor * f.temp_grad[:,1]
                     f.lip += np.square(grad)
                     #we augment the learning rate, since this update only happens once per time frame 
                     f.w = f.w - f.eta * (u.atoms.numberOfAtoms()) / np.sqrt(f.lip) * grad

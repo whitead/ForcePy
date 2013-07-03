@@ -167,10 +167,9 @@ class LJForce(PairwiseAnalyticForce):
     """ Lennard jones pairwise analytic force
     """
     def __init__(self, cutoff, sigma=1, epsilon=1):
-        super(LJForce, self).__init__(LJForce.lj, LJForce.dlj, 2)
+        super(LJForce, self).__init__(LJForce.lj, LJForce.dlj, 2, cutoff)
         self.w[0] = epsilon
         self.w[1] = sigma
-        self.category = Pairwise.get_instance(cutoff)
         
     @staticmethod
     def lj(d, w):
@@ -257,10 +256,11 @@ class PairwiseSpectralForce(Force):
     defined as so: def unit_step(x, mesh, height).
     """
     
-    def __init__(self, mesh, f, g, *args):
+    def __init__(self, mesh, f, *args):
         self.call_basis = f
         self.call_basis_args = args
         self.mesh = mesh
+        self.call_potential = None
         #create weights 
         self.temp_force = np.zeros( 3 )
         self.category = Pairwise.get_instance(mesh.max())
@@ -268,13 +268,22 @@ class PairwiseSpectralForce(Force):
         #if this is an updatable force, set up stuff for it
         self._setup_update_params(len(mesh))
         
-
     def clone_force(self):
         copy = PairwiseSpectralForce(self.mesh, self.call_basis, self.call_basis_args)
+        if(not self.call_potential is None):
+            copy.call_potential = self.call_potential
         return copy
         
+    def set_potential(self, u):
+        """ Set the basis function for the potential calculation
+        """
+        self.call_potential = u
+    
 
     def calc_potential(self, u):
+        if(self.call_potential is None):
+            raise RunTimeError("Must call set_potential before using calc_potential")
+
         positions = u.atoms.get_positions()
         nlist_accum = 0        
         potential = 0
@@ -292,9 +301,9 @@ class PairwiseSpectralForce(Force):
                     continue
                 r = positions[j] - positions[i]
                 d = ln.norm(r)
-                temp = self.call_basis(d, self.mesh, *self.call_basis_args)
+                temp = self.call_potential(d, self.mesh, *self.call_basis_args)
                 potential += self.w.dot(temp)
-                self.temp_grad[,1] += temp
+                self.temp_grad[:,1] += temp
             nlist_accum += self.category.nlist_lengths[i]
 
     

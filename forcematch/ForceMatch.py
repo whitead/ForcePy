@@ -30,6 +30,7 @@ class ForceMatch:
             self.do_obs = True
             self.energy = [0 for x in range(self.u.trajectory.numframes)]
             self.obs = [0 for x in range(self.u.trajectory.numframes)]
+            self.energy_lip = 0
             with open(self.json["observable"], 'r') as f:
                 lines = f.readlines()
                 if(len(lines) != len(self.energy)):
@@ -143,22 +144,28 @@ class ForceMatch:
                     energy += f.calc_potential(self.u)
                 #now calculate prefactor
                 exponent = (self.energy[self.u.trajectory.frame - 1] - energy) / self.kt
-                print exponent
-                if(exponent > 0):
-                    prefactor = -energy / self.kt
-                else:
-                    prefactor = -energy / self.kt * exp(exponent)
+                print "exponent: %g" % exponent
+                #if(exponent > 0):
+                #    prefactor = -energy / self.kt
+                #else:
+                #    prefactor = -energy / self.kt * exp(exponent)
                 #prefactor = -energy / self.kt * exp( (energy  - self.energy[self.u.trajectory.frame - 1]) / self.kt)
-                prefactor *= self.obs[self.u.trajectory.frame - 1]
+                #prefactor *= self.obs[self.u.trajectory.frame - 1]
+                #use Taylor expansion of derivative (?)
+                prefactor = exponent * self.obs[self.u.trajectory.frame - 1]
+                self.energy_lip += prefactor 
+                if(self.energy_lip > 0 ):
+                    prefactor /= self.energy_lip
                 
                 #now update the weights
                 for f in self.tar_forces:
+                    print "prefactor: %g" % prefactor
                     grad = prefactor * f.temp_grad[:,1]
                     print "e grad:"
                     print grad
                     f.lip += np.square(grad)
                     #we augment the learning rate, since this update only happens once per time frame 
-                    f.w = f.w - f.eta * (self.u.atoms.numberOfAtoms()) / np.sqrt(f.lip) * grad
+                    f.w = f.w - f.eta / np.sqrt(f.lip) * grad
 
             #re-zero reference forces
             ref_forces.fill(0)

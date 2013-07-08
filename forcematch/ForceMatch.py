@@ -6,7 +6,7 @@ from math import ceil
 from MDAnalysis import Universe
 from scipy import weave
 from scipy.weave import converters
-from math import ceil, log, exp
+from math import ceil, log, exp, sqrt
 
 class ForceMatch:
     """Main force match class.
@@ -19,6 +19,8 @@ class ForceMatch:
         self.tar_forces = []
         self._load_json(input_file)
         self.force_match_calls = 0
+        self.plot_frequency = 10
+        self.step_termination = 100
     
     def _load_json(self, input_file):
         with open(input_file, 'r') as f:
@@ -28,16 +30,15 @@ class ForceMatch:
         self.kt = self.json["kT"]
         if("observable" in self.json):
             self.do_obs = True
-            self.energy = [0 for x in range(self.u.trajectory.numframes)]
             self.obs = [0 for x in range(self.u.trajectory.numframes)]
-            self.energy_lip = 0
             with open(self.json["observable"], 'r') as f:
                 lines = f.readlines()
-                if(len(lines) != len(self.energy)):
+                if(len(lines) != len(self.obs)):
                     raise RunTimeError("Number of the frames does not match number of lines in observation file")
                 for i, line in zip(range(len(lines)), lines):
-                    self.energy[i] = float(line.split()[0])
-                    self.obs[i] = float(line.split()[1])
+                    self.obs[i] = float(line.split()[0])
+
+
         if("box" in self.json):
             if(len(self.json["box"]) != 3):
                 raise IOError("Input file JSON: box must look like \"box\":[5,5,5]. It must have 3 dimensions in an array")
@@ -86,12 +87,15 @@ class ForceMatch:
                 rf.calc_forces(ref_forces, self.u)            
 
             #make plots
-            for f in self.tar_forces:
-                try:
-                    f.plot("%s_%d" % (f.__class__.__name__, self.force_match_calls))
-                except AttributeError:
-                    #doesn't have plotting method, oh well
-                    pass
+            if(self.force_match_calls % self.plot_frequency == 0):
+                for f in self.tar_forces:
+                    f.update_plot(true_force=lambda x:4 * (6 * x**(-7) - 12 * x**(-13) ), true_potential=lambda x: 4 * (x**(-12) - x**(-6)))
+                    try:
+                        pass
+                        #f.update_plot(true_force=lambda x:4 * (6 * x**(-7) - 12 * x**(-13) ), true_potential=lambda x: 4 * (x**(-12) - x**(-6)))
+                    except AttributeError:
+                        #doesn't have plotting method, oh well
+                        pass
 
             #track error
             net_df = 0
@@ -132,46 +136,77 @@ class ForceMatch:
                     for r in f.regularization:
                         grad += r[0](f.w)
                     f.lip +=  np.square(grad)
-                    f.w = f.w - f.eta / np.sqrt(f.lip) * grad
-            #log of the error
-            print "log error = %g" % (0 if net_df < 1 else log(net_df))
 
-            #now, we work on matching the obs if we're trying to match it
-            if(self.obs):
+                    f.w = f.w - f.eta / np.sqrt(f.lip) * grad
+
+            ref_forces.fill(0)
+            self._teardown()
+
+            #log of the error
+            print "log error at %d / %d  = %g" % (self.force_match_calls,self.u.trajectory.numframes, 0 if net_df < 1 else log(net_df))
+            
+            if(self.force_match_calls == self.step_termination):
+                break
+
+        #now, we work on matching the obs if we're trying to match it
+        if(self.obs):
+
+            self.u.trajectory.rewind()
+            
+            #reset per-coordinate learning rate 
+            for f in self.tar_forces:
+                f.lip.fill(1)                
+
+            self.normalization = 0
+
+            for ts in self.u.trajectory:
+
+                self.force_match_calls += 1
+                #make plots
+                if(self.force_match_calls % self.plot_frequency == 0):
+                    for f in self.tar_forces:
+                        f.update_plot(true_force=lambda x:4 * (6 * x**(-7) - 12 * x**(-13) ), true_potential=lambda x: 4 * (x**(-12) - x**(-6)))
+                        try:
+                            pass
+                            #f.update_plot(true_force=lambda x:4 * (6 * x**(-7) - 12 * x**(-13) ), true_potential=lambda x: 4 * (x**(-12) - x**(-6)))
+                        except AttributeError:
+                            #doesn't have plotting method, oh well
+                            pass
+
+
                 #get energy deviation first
                 energy = 0
                 for f in self.tar_forces:
                     energy += f.calc_potential(self.u)
+                
+                ref_energy = 0
+                for f in self.ref_forces:
+                    ref_energy += f.calc_potential(self.u)
+
                 #now calculate prefactor
-                exponent = (self.energy[self.u.trajectory.frame - 1] - energy) / self.kt
-                print "exponent: %g" % exponent
-                #if(exponent > 0):
-                #    prefactor = -energy / self.kt
-                #else:
-                #    prefactor = -energy / self.kt * exp(exponent)
-                #prefactor = -energy / self.kt * exp( (energy  - self.energy[self.u.trajectory.frame - 1]) / self.kt)
-                #prefactor *= self.obs[self.u.trajectory.frame - 1]
+                exponent = (ref_energy - energy) / (self.u.atoms.numberOfAtoms() * self.kt)
+
+                print "energy: %g" % energy
+                print "ref energy: %g" % ref_energy
+
+                prefactor = -energy / (self.u.atoms.numberOfAtoms() * self.kt) * exp(exponent)
+                self.normalization += prefactor                
+                prefactor *= self.obs[self.u.trajectory.frame - 1] * (1 - 1 / self.normalization)
                 #use Taylor expansion of derivative (?)
-                prefactor = exponent * self.obs[self.u.trajectory.frame - 1]
-                self.energy_lip += prefactor 
-                if(self.energy_lip > 0 ):
-                    prefactor /= self.energy_lip
+                #prefactor = exponent * self.obs[self.u.trajectory.frame - 1]
                 
                 #now update the weights
                 for f in self.tar_forces:
                     print "prefactor: %g" % prefactor
                     grad = prefactor * f.temp_grad[:,1]
-                    print "e grad:"
-                    print grad
-                    f.lip += np.square(grad)
-                    #we augment the learning rate, since this update only happens once per time frame 
+                    #print "e grad:"
+                    #print grad
+                    f.lip += np.square(grad)                    
                     f.w = f.w - f.eta / np.sqrt(f.lip) * grad
-
-            #re-zero reference forces
-            ref_forces.fill(0)
-
-            self._teardown()
-
+                    print f.eta / np.sqrt(f.lip) * grad
+                
+                self._teardown()
+            
 
     def add_and_type_pair(self, force):
         types = []

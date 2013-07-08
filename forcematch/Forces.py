@@ -17,7 +17,7 @@ class Force(object):
        To be used in the stochastic gradient step, a force should implement all of the methods here
     """
     
-    def _setup_update_params(self, w_dim, initial_height=5):
+    def _setup_update_params(self, w_dim, initial_height=-5):
         self.w = initial_height * np.ones( w_dim )
         self.temp_grad = np.empty( (w_dim, 3) )
         self.temp_force = np.empty( 3 )
@@ -25,13 +25,18 @@ class Force(object):
         self.regularization = []
         self.lip = np.ones( np.shape(self.w) )
         self.grad = np.zeros( np.shape(self.w) )
-        self.eta = initial_height * 2
+        self.eta = max(1, abs(initial_height) * 2)
         self.sel1 = None
         self.sel2 = None
 
-    #In case the force needs access to the universe, override (and call this method).
+    #In case the force needs access to the universe for setting up, override (and call this method).
     def setup_hook(self, u):
         self._build_mask(self.sel1, self.sel2, u)
+
+    def set_potential(self, u):
+        """ Set the basis function for the potential calculation
+        """
+        self.call_potential = u        
 
     def get_category(self):
         try:
@@ -110,7 +115,36 @@ class PairwiseAnalyticForce(Force):
 
     def clone_force(self):
         copy = PairwiseAnalyticForce(self.call_force, self.call_grad, len(self.w), self.category.cutoff)
+        if(not self.call_potential is None):
+            copy.call_potential = self.call_potential
+
         return copy
+
+
+    def calc_potential(self, u):
+        if(self.call_potential is None):
+            return 0
+
+        positions = u.atoms.get_positions()
+        nlist_accum = 0
+        potential = 0
+        for i in range(u.atoms.numberOfAtoms()):
+            #check atom types
+            if(self.mask1[i]):
+                maskj = self.mask2
+            elif(self.mask2[i]):
+                maskj = self.mask1
+            else:
+                continue
+            for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
+                #do not double count
+                if(not maskj[j] or i < j):
+                    continue
+                r = positions[j] - positions[i]
+                d = ln.norm(r)
+                potential += self.call_potential(d,self.w)
+            nlist_accum += self.category.nlist_lengths[i]
+        return potential
                                      
 
     def calc_forces(self, forces, u):
@@ -164,16 +198,21 @@ class PairwiseAnalyticForce(Force):
     
 
 class LJForce(PairwiseAnalyticForce):
-    """ Lennard jones pairwise analytic force
+    """ Lennard jones pairwise analytic force. Not shifted (!)
     """
     def __init__(self, cutoff, sigma=1, epsilon=1):
         super(LJForce, self).__init__(LJForce.lj, LJForce.dlj, 2, cutoff)
+        self.set_potential(LJForce.ulj)
         self.w[0] = epsilon
         self.w[1] = sigma
         
     @staticmethod
     def lj(d, w):
         return 4 * w[0] * (6 * (w[1] / d) ** 7 - 12 * (w[1] / d) ** 13)
+
+    @staticmethod
+    def ulj(d, w):
+        return 4 * w[0] * ((w[1] / d) ** 12 - (w[1] / d) ** 6)
 
     @staticmethod
     def dlj(d, w):
@@ -272,17 +311,11 @@ class PairwiseSpectralForce(Force):
         copy = PairwiseSpectralForce(self.mesh, self.call_basis, *self.call_basis_args)
         if(not self.call_potential is None):
             copy.call_potential = self.call_potential
-        return copy
-        
-    def set_potential(self, u):
-        """ Set the basis function for the potential calculation
-        """
-        self.call_potential = u
-    
+        return copy           
 
     def calc_potential(self, u):
         if(self.call_potential is None):
-            raise RunTimeError("Must call set_potential before using calc_potential")
+            return 0
 
         positions = u.atoms.get_positions()
         nlist_accum = 0        
@@ -297,7 +330,8 @@ class PairwiseSpectralForce(Force):
             else:
                 continue
             for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
-                if(not maskj[i]):
+                #do not doulbe count for calculating potential!
+                if(not maskj[i] or i < j):
                     continue
                 r = positions[j] - positions[i]
                 d = ln.norm(r)
@@ -353,7 +387,6 @@ class PairwiseSpectralForce(Force):
         for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
             
             if(not maskj[j]):
-                print" INVALID"
                 continue
 
             r = positions[j] - positions[i]
@@ -376,20 +409,96 @@ class PairwiseSpectralForce(Force):
             #forces +=  temp * r
             #self.temp_grad +=  np.outer(temp, r)
         return force
-    
+
+    def update_plot(self, true_force=None, true_potential=None):
+
+        #if this is first call, we need to call plot
+        try:
+            self.current_fig
+        except AttributeError:
+            self.plot(None, true_force, true_potential)
+            return
+        
+        #use center of our fine mesh and call the force calculations
+        for i in range(len(self.plot_force)):
+            self.plot_force[i] = self.w * np.asmatrix(self.call_basis(self.plot_x[i], self.mesh, *self.call_basis_args).reshape((len(self.w), 1)))
+
+        #restore cache, update plot, redraw only force            
+        force_ax = self.current_fig.get_axes()[0]
+        self.force_line.set_ydata(self.plot_force)
+        force_ax.set_ylim(1.1*min(min(self.plot_force), -max(self.plot_force)), 1.1*max(self.plot_force))
+            
+        #plot potential if necessary
+        if(not (self.call_potential is None)):
+            for i in range(len(self.plot_force)):
+                self.plot_potential[i] = self.w * np.asmatrix(self.call_potential(self.plot_x[i], self.mesh, *self.call_basis_args).reshape((len(self.w), 1)))
+
+            #restore cache, update plot, redraw only potential
+            potential_ax = self.current_fig.get_axes()[1]
+            self.potential_line.set_ydata(self.plot_potential)
+            potential_ax.set_ylim(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*max(self.plot_potential))
+
+        plt.draw()
+
+    def plot(self, outfile=None, true_force=None, true_potential=None):
+
+        #make a mesh finer than the mesh used for finding paramers
+        self.plot_mesh = UniformMesh(self.mesh.min(), self.mesh.max(), self.mesh.dx / 2)
+        self.plot_force = np.empty( len(self.plot_mesh) )
+        self.plot_x = np.empty( np.shape(self.plot_force) )        
+
+        
+        #set up figure and check to see if we're plotting the potential
+        self.current_fig = plt.figure(figsize=(16, 12), dpi=80)
+
+        if(self.call_potential is None):
+            force_ax = plt.subplot(111)
+
+        else:
+            force_ax = plt.subplot(211)
+            potential_ax = plt.subplot(212)
+
+        #use center of our fine mesh and call the force calculations
+        for i in range(len(self.plot_force)):
+            self.plot_x[i] = (self.plot_mesh[i] + self.plot_mesh[i + 1]) / 2.
+            self.plot_force[i] = self.w * np.asmatrix(self.call_basis(self.plot_x[i], self.mesh, *self.call_basis_args).reshape((len(self.w), 1)))
 
 
-    def plot(self, outfile):
-        mesh = UniformMesh(self.mesh.min(), self.mesh.max(), self.mesh.dx / 2)
-        force = np.empty( len(mesh) )
-        x = np.empty( np.shape(force) )
-        for i in range(len(force)):
-            x[i] = (mesh[i] + mesh[i + 1]) / 2.
-            force[i] = self.w * np.asmatrix(self.call_basis(x[i], self.mesh, *self.call_basis_args).reshape((len(self.w), 1)))
-        fig = plt.figure(figsize=(8, 6), dpi=80)
-        ax = plt.subplot(1,1,1)
-        ax.plot(x, force, color="blue")
-        ax.axis([min(x), max(x), min(min(force), -max(force)), max(force)])
-        fig.tight_layout()
-        plt.savefig(outfile)
+        #draw true functions, if they are given
+        if(not (true_force is None)):
+            force = np.empty( len(self.plot_mesh) )
+            for i in range(len(force)):
+                force[i] = true_force(self.plot_x[i])
+            force_ax.plot(self.plot_x, force, color="red")
+        if(not (true_potential is None) and not (self.call_potential is None)):
+            potential = np.empty( len(self.plot_mesh) )
+            for i in range(len(potential)):
+                potential[i] = true_potential(self.plot_x[i])
+            potential_ax.plot(self.plot_x, potential, color="red")
+
+        #plot force and save reference to line
+        self.force_line, = force_ax.plot(self.plot_x, self.plot_force, color="blue")
+
+        force_ax.set_ylim(1.1*min(min(self.plot_force), -max(self.plot_force)), 1.1*max(self.plot_force))
+
+        #plot potential if possible
+        if(not (self.call_potential is None)):
+            self.plot_potential = np.empty( len(self.plot_mesh) )
+            for i in range(len(self.plot_force)):
+                self.plot_potential[i] = self.w * np.asmatrix(self.call_potential(self.plot_x[i], self.mesh, *self.call_basis_args).reshape((len(self.w), 1)))
+
+            self.potential_line, = potential_ax.plot(self.plot_x, self.plot_potential, color="green")
+            potential_ax.set_ylim(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*max(self.plot_potential))
+
+        #make layout tighter
+        self.current_fig.tight_layout()
+        
+        #cache background
+
+        #show or output to file
+        if(outfile is None):
+            plt.ion()
+            plt.show()
+        else:
+            plt.savefig(outfile)
                                   

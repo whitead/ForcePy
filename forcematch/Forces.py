@@ -38,7 +38,10 @@ class Force(object):
 
     #In case the force needs access to the universe for setting up, override (and call this method).
     def setup_hook(self, u):
-        self._build_mask(self.sel1, self.sel2, u)
+        try:
+            self._build_mask(self.sel1, self.sel2, u)
+        except AttributeError:
+            pass #some forces don't have selections, ie FileForce
 
     def set_potential(self, u):
         """ Set the basis function for the potential calculation
@@ -98,6 +101,10 @@ class FileForce(Force):
 
     def calc_forces(self, forces, u):
         forces[:] = u.trajectory.ts._forces
+
+    def clone_force(self):
+        copy = FileForce()
+
 
 
 class PairwiseAnalyticForce(Force):

@@ -1,5 +1,5 @@
 {
     "structure" : "test/methanol/cg.pdb",
     "trajectory" : "test/methanol/cg.trr",
-    "pair_forces" : {"PairwiseSpectralForce": ["UniformMesh" : {0, 12, 0.1}, "unit_step"]}
+    "kT" : 0.7
 }

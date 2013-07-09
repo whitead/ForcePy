@@ -48,7 +48,7 @@ class ForceMatch:
     def _test_json(self, json, required_keys = [("structure", "Toplogy file"), ("trajectory", "Trajectory File"), ("kT", "Boltzmann's constant times temperature")]):
         for rk in required_keys:
             if(not json.has_key(rk[0])):
-                raise IOError("Error in input file, could not find %s" % rk[1])
+                raise IOError("Error in input file, could not find %s\n. Set using %s keyword" % (rk[1], rk[0]))
 
     def add_tar_force(self, *forces):
         for f in forces:

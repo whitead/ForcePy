@@ -20,7 +20,6 @@ class ForceMatch:
         self._load_json(input_file)
         self.force_match_calls = 0
         self.plot_frequency = 10
-        self.step_termination = 100
     
     def _load_json(self, input_file):
         with open(input_file, 'r') as f:
@@ -33,9 +32,10 @@ class ForceMatch:
             self.obs = [0 for x in range(self.u.trajectory.numframes)]
             with open(self.json["observable"], 'r') as f:
                 lines = f.readlines()
-                if(len(lines) != len(self.obs)):
-                    raise RunTimeError("Number of the frames does not match number of lines in observation file")
-                for i, line in zip(range(len(lines)), lines):
+                if(len(lines) < len(self.obs)):
+                    raise IOError("Number of the frames (%d) does not match number of lines in observation file (%d)" %
+                                  (len(self.obs), len(lines)))
+                for i, line in zip(range(len(self.obs)), lines[:len(self.obs)]):
                     self.obs[i] = float(line.split()[0])
 
 
@@ -66,11 +66,26 @@ class ForceMatch:
                 self.ref_cats.append(cat)
             f.setup_hook(self.u)
 
+
+    def swap_match_parameters_cache(self):
+        try:
+            for f in self.tar_forces:
+                self.cache[f], f.lip = f.lip, self.cache[f]
+        except AttributeError:
+            self.cache = {}
+            for f in self.tar_forces:
+                self.cache[f] = np.copy(f.lip)
+            
+        
     
         
-    def force_match(self):
+    def force_match(self, iterations = 0):
+        
+        if(iterations == 0):
+            iterations = self.u.trajectory.numframes
         
         ref_forces = np.zeros( (self.u.atoms.numberOfAtoms(), 3) )
+        self.u.trajectory.rewind() # just in case this is called after some analysis has been done
 
         for ts in self.u.trajectory:
             
@@ -87,7 +102,7 @@ class ForceMatch:
                 rf.calc_forces(ref_forces, self.u)            
 
             #make plots
-            if(self.force_match_calls % self.plot_frequency == 0):
+            if(iterations % self.plot_frequency == 0):
                 for f in self.tar_forces:
                     f.update_plot(true_force=lambda x:4 * (6 * x**(-7) - 12 * x**(-13) ), true_potential=lambda x: 4 * (x**(-12) - x**(-6)))
                     try:
@@ -143,82 +158,111 @@ class ForceMatch:
             self._teardown()
 
             #log of the error
-            print "log error at %d / %d  = %g" % (self.force_match_calls,self.u.trajectory.numframes, 0 if net_df < 1 else log(net_df))
+            print "log error at %d  = %g" % (iterations, 0 if net_df < 1 else log(net_df))
             
-            if(self.force_match_calls == self.step_termination):
+            iterations -= 1
+            if(iterations == 0):
                 break
 
-        #Match observations, if we're trying to match them
-        if(self.obs):
 
-            self.u.trajectory.rewind()
+    def observation_match(self, obs_sweeps = 25, obs_samples = None, reject_tol = None):
+        """ Match observations
+        """
+
+        if(obs_samples is None):
+            obs_samples = max(5, self.u.trajectory.numframes / obs_sweeps)
+        if(reject_tol is None):
+            reject_tol = obs_samples
+                
+        #in case force mathcing is being performed simultaneously,
+        #we want to cache any force specific parameters so that we
+        #can swap them back in afterwards
+        self.swap_match_parameters_cache()
+
+        #we're going to sample the covariance using importance
+        #sampling. This requires a normalization coefficient, so
+        #we must do multiple random frames
+
+        s_grads = {} #this is to store the sampled gradients. Key is Force and Value is gradient
+        for f in self.tar_forces:
+            s_grads[f] = [None for x in range(obs_samples)]
+        s_obs = [0 for x in range(obs_samples)] #this is to store the sampled observations
+        s_weights = [0 for x in range(obs_samples)]
             
-            #reset per-coordinate learning rate 
+        for s in range(obs_sweeps):
+
+            self.force_match_calls += 1
+            #make plots
             for f in self.tar_forces:
-                f.lip.fill(1)                
+                try:
+                    f.update_plot(true_force=lambda x:4 * (6 * x**(-7) - 12 * x**(-13) ), true_potential=lambda x: 4 * (x**(-12) - x**(-6)))
+                except AttributeError:
+                     #doesn't have plotting method, oh well
+                    pass
 
-            #we're going to sample the covariance using importance
-            #sampling. This requires a normalization coefficient, so
-            #we must do multiple random frames
-            self.obs_sweeps = 10
-            self.obs_samples = 5
-            for s in range(self.obs_sweeps):
-
-                self.force_match_calls += 1
-                #make plots
-                if(self.force_match_calls % self.plot_frequency == 0):
-                    for f in self.tar_forces:
-                        f.update_plot(true_force=lambda x:4 * (6 * x**(-7) - 12 * x**(-13) ), true_potential=lambda x: 4 * (x**(-12) - x**(-6)))
-                        try:
-                            pass
-                            #f.update_plot(true_force=lambda x:4 * (6 * x**(-7) - 12 * x**(-13) ), true_potential=lambda x: 4 * (x**(-12) - x**(-6)))
-                        except AttributeError:
-                            #doesn't have plotting method, oh well
-                            pass
-
-                #now we esimtate gradient of the loss function via importance sampling
-                normalization = 0
-                traj_index = random.choice(range(self.u.trajectory.numframes))
+            #now we esimtate gradient of the loss function via importance sampling
+            normalization = 0
                 
-                #note, this reading method is so slow. I should implement the frame jump in xyz
-                for ti in traj_index:
-                    self.u.trajectory.rewind()
-                    [self.u.trajectory.next() for x in range(ti)]
+            #note, this reading method is so slow. I should implement the frame jump in xyz
+            rejects = 0
+            i = 0
 
-                    #get weight
-                    dev_energy = 0
-                    for f in self.tar_forces:
-                        dev_energy -= f.calc_potential(self.u)
-                        
-                    for f in self.ref_forces:
-                        dev_energy += f.calc_potential(self.u)               
-                    
+            while i < obs_samples:
 
-                #get energy deviation first
+                index = self._sample_ts() #sample a trajectory frame
+                self._setup()
 
-                #now calculate prefactor
-                exponent = (ref_energy - energy) / (self.u.atoms.numberOfAtoms() * self.kt)
-
-                print "energy: %g" % energy
-                print "ref energy: %g" % ref_energy
-
-                prefactor = -energy / (self.u.atoms.numberOfAtoms() * self.kt) * exp(exponent)
-                self.normalization += prefactor                
-                prefactor *= self.obs[self.u.trajectory.frame - 1] * (1 - 1 / self.normalization)
-                #use Taylor expansion of derivative (?)
-                #prefactor = exponent * self.obs[self.u.trajectory.frame - 1]
-                
-                #now update the weights
+                 #get weight
+                dev_energy = 0
                 for f in self.tar_forces:
-                    print "prefactor: %g" % prefactor
-                    grad = prefactor * f.temp_grad[:,1]
-                    #print "e grad:"
-                    #print grad
-                    f.lip += np.square(grad)                    
-                    f.w = f.w - f.eta / np.sqrt(f.lip) * grad
-                    print f.eta / np.sqrt(f.lip) * grad
-                
+                    dev_energy -= f.calc_potential(self.u)
+                        
+                for f in self.ref_forces:
+                    dev_energy += f.calc_potential(self.u)
+
+                    
+                if(abs(dev_energy /self.kt) > 250):
+                    rejects += 1
+                    if(rejects == reject_tol):
+                        print "Rejection rate of frames is too high, restarting force matching"
+                        self.swap_match_parameters_cache()
+                        self.force_match(rejects) #arbitrarily using number of rejects for number matces to use
+                        self.swap_match_parameters_cache()
+                        rejects = 0
+                        continue
+                    else:
+                        continue
+
+                weight = exp(dev_energy / self.kt)
+                s_weights[i] = weight
+                normalization += weight
+
+                #store gradient and observabels
+                s_obs[i] = weight * self.obs[i]
+                for f in self.tar_forces:
+                    s_grads[f][i] = weight * np.copy(f.temp_grad[:,1])
+
+                i += 1
                 self._teardown()
+
+            print "Obs Mean: %g, reweighted mean: %g" % (sum(self.obs) / len(self.obs) ,sum(s_obs) / normalization)
+
+            #normalize and then calculate covariance
+            for f in self.tar_forces:
+                f.w_grad.fill(0)
+                grad = f.w_grad
+                for x,y in zip(s_grads[f], s_obs):
+                    grad -= x * y / normalization ** 2
+                for x,y in zip(random.sample(s_grads[f], obs_samples), random.sample(s_obs, obs_samples)):
+                    grad += x * y / normalization ** 2
+                grad *= self.kt
+
+                #now update the weights
+                f.lip += np.square(grad)
+                change = f.eta / np.sqrt(f.lip) * grad
+                f.w = f.w - f.eta / np.sqrt(f.lip) * grad
+
+
             
 
     def add_and_type_pair(self, force):
@@ -231,6 +275,15 @@ class ForceMatch:
                 f = force.clone_force()
                 f.specialize_types("type %s" % types[i], "type %s" % types[j])
                 self.add_tar_force(f)
+
+    def _sample_ts(self):        
+        self.u.trajectory.rewind()
+        index = random.randint(0,self.u.trajectory.numframes - 1)
+        [self.u.trajectory.next() for x in range(index)]
+        return index
+                   
+
+        
             
     def _setup(self):
         for rfcat in self.ref_cats:

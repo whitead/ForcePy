@@ -17,15 +17,22 @@ class Force(object):
        To be used in the stochastic gradient step, a force should implement all of the methods here
     """
     
-    def _setup_update_params(self, w_dim, initial_height=-5):
-        self.w = initial_height * np.ones( w_dim )
+    def _setup_update_params(self, w_dim, initial_w=-1):
+        try:
+            if(w_dim != len(initial_w)):
+                self.w = initial_w[0] * np.ones( w_dim )
+            else:
+                self.w = np.copy(initial_w)
+            self.eta = max(1, np.median(abs(initial_height)) * 2)
+        except TypeError:
+            self.w = initial_w * np.ones( w_dim )
+            self.eta = max(1, abs(initial_w) * 2)
+
         self.temp_grad = np.empty( (w_dim, 3) )
         self.temp_force = np.empty( 3 )
         self.w_grad = np.empty( w_dim )
         self.regularization = []
         self.lip = np.ones( np.shape(self.w) )
-        self.grad = np.zeros( np.shape(self.w) )
-        self.eta = max(1, abs(initial_height) * 2)
         self.sel1 = None
         self.sel2 = None
 
@@ -141,7 +148,7 @@ class PairwiseAnalyticForce(Force):
                 if(not maskj[j] or i < j):
                     continue
                 r = positions[j] - positions[i]
-                d = ln.norm(r)
+                d = ln.norm(r)            
                 potential += self.call_potential(d,self.w)
             nlist_accum += self.category.nlist_lengths[i]
         return potential

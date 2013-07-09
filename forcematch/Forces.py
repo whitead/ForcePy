@@ -36,7 +36,7 @@ class Force(object):
     def set_potential(self, u):
         """ Set the basis function for the potential calculation
         """
-        self.call_potential = u        
+        self.call_potential = u 
 
     def get_category(self):
         try:

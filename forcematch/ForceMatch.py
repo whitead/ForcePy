@@ -148,7 +148,7 @@ class ForceMatch:
             if(self.force_match_calls == self.step_termination):
                 break
 
-        #now, we work on matching the obs if we're trying to match it
+        #Match observations, if we're trying to match them
         if(self.obs):
 
             self.u.trajectory.rewind()
@@ -157,9 +157,12 @@ class ForceMatch:
             for f in self.tar_forces:
                 f.lip.fill(1)                
 
-            self.normalization = 0
-
-            for ts in self.u.trajectory:
+            #we're going to sample the covariance using importance
+            #sampling. This requires a normalization coefficient, so
+            #we must do multiple random frames
+            self.obs_sweeps = 10
+            self.obs_samples = 5
+            for s in range(self.obs_sweeps):
 
                 self.force_match_calls += 1
                 #make plots
@@ -173,15 +176,25 @@ class ForceMatch:
                             #doesn't have plotting method, oh well
                             pass
 
+                #now we esimtate gradient of the loss function via importance sampling
+                normalization = 0
+                traj_index = random.choice(range(self.u.trajectory.numframes))
+                
+                #note, this reading method is so slow. I should implement the frame jump in xyz
+                for ti in traj_index:
+                    self.u.trajectory.rewind()
+                    [self.u.trajectory.next() for x in range(ti)]
+
+                    #get weight
+                    dev_energy = 0
+                    for f in self.tar_forces:
+                        dev_energy -= f.calc_potential(self.u)
+                        
+                    for f in self.ref_forces:
+                        dev_energy += f.calc_potential(self.u)               
+                    
 
                 #get energy deviation first
-                energy = 0
-                for f in self.tar_forces:
-                    energy += f.calc_potential(self.u)
-                
-                ref_energy = 0
-                for f in self.ref_forces:
-                    ref_energy += f.calc_potential(self.u)
 
                 #now calculate prefactor
                 exponent = (ref_energy - energy) / (self.u.atoms.numberOfAtoms() * self.kt)

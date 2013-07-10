@@ -18,7 +18,7 @@ class ForceMatch:
         self.ref_forces =  []
         self.tar_forces = []
         self._load_json(input_file) 
-       self.force_match_calls = 0
+        self.force_match_calls = 0
         self.plot_frequency = 10
     
     def _load_json(self, input_file):

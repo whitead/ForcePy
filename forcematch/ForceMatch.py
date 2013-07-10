@@ -17,8 +17,8 @@ class ForceMatch:
         self.tar_cats = []
         self.ref_forces =  []
         self.tar_forces = []
-        self._load_json(input_file)
-        self.force_match_calls = 0
+        self._load_json(input_file) 
+       self.force_match_calls = 0
         self.plot_frequency = 10
     
     def _load_json(self, input_file):
@@ -245,23 +245,29 @@ class ForceMatch:
                 i += 1
                 self._teardown()
 
-            print "Obs Mean: %g, reweighted mean: %g" % (sum(self.obs) / len(self.obs) ,sum(s_obs) / normalization)
-
-            #normalize and then calculate covariance
+            #normalize and calculate covariance
             for f in self.tar_forces:
                 f.w_grad.fill(0)
                 grad = f.w_grad
-                for x,y in zip(s_grads[f], s_obs):
-                    grad -= x * y / normalization ** 2
-                for x,y in zip(random.sample(s_grads[f], obs_samples), random.sample(s_obs, obs_samples)):
-                    grad += x * y / normalization ** 2
-                grad *= self.kt
+
+                #two-pass covariance calculation, utilizing the temp_grad in f
+                meanobs = sum(s_obs) / normalization
+                meangrad = f.temp_grad[:,2]
+                meangrad.fill(0)
+                for x in s_grads[f]:
+                    meangrad += x  / normalization
+                for x,y in zip(s_obs, s_grads[f]):
+                    grad += (x - meanobs) * (y - meangrad) / normalization
+
+                #recall we need the negative covariance times the inverse temperature
+                grad *= -1. / self.kt
 
                 #now update the weights
                 f.lip += np.square(grad)
                 change = f.eta / np.sqrt(f.lip) * grad
                 f.w = f.w - f.eta / np.sqrt(f.lip) * grad
 
+                print "Obs Mean: %g, reweighted mean: %g" % (sum(self.obs) / len(self.obs) ,meanobs)
 
             
 

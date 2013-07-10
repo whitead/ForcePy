@@ -14,15 +14,15 @@ def int_unit_step(x, mesh):
     return -result
     
 
-#fm = ForceMatch("test/lj.json")
-fm = ForceMatch("test/methanol.json")
-ff = FileForce()
-#ff = LJForce(3)
-pwf = PairwiseSpectralForce(UniformMesh(0,12,0.025), unit_step)
+fm = ForceMatch("test/lj.json")
+#fm = ForceMatch("test/methanol.json")
+#ff = FileForce()
+ff = LJForce(3)
+pwf = PairwiseSpectralForce(UniformMesh(0,3,0.025), unit_step)
 pwf.set_potential(int_unit_step)
 #pwf = LJForce(sigma=1.5, epsilon=0.9)
 pwf.add_regularizer(SmoothRegularizer)
 fm.add_ref_force(ff)
 fm.add_and_type_pair(pwf)
 fm.force_match(80)
-#fm.observation_match(10, obs_samples=25)
+fm.observation_match(10, obs_samples=25)

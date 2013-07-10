@@ -1,0 +1,10 @@
+{
+  groups : {
+             "s1": "not type CA and not type N and not type O",
+             "m1": "type CA or type N or type O"},
+  collapse_hydrogens : True,
+  bonds : True,
+  structure : "peptide.pdb",
+  trajectory : "peptide.dcd"
+
+}

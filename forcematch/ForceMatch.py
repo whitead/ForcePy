@@ -12,11 +12,12 @@ class ForceMatch:
     """Main force match class.
     """
     
-    def __init__(self, input_file):
+    def __init__(self, cguniverse, input_file):
         self.ref_cats = []
         self.tar_cats = []
         self.ref_forces =  []
         self.tar_forces = []
+        self.u = aauniverse
         self._load_json(input_file) 
         self.force_match_calls = 0
         self.plot_frequency = 10
@@ -25,7 +26,6 @@ class ForceMatch:
         with open(input_file, 'r') as f:
             self.json = json.load(f)
         self._test_json(self.json)
-        self.u = Universe(self.json["structure"], str(self.json["trajectory"]))
         self.kt = self.json["kT"]
         if("observable" in self.json):
             self.do_obs = True
@@ -75,9 +75,7 @@ class ForceMatch:
             self.cache = {}
             for f in self.tar_forces:
                 self.cache[f] = np.copy(f.lip)
-            
-        
-    
+                        
         
     def force_match(self, iterations = 0):
         
@@ -377,7 +375,27 @@ class NeighborList:
 
         self.bins_ready = True
 
+    def _build_exclusion_list(self, u):
+        #what we're building
+        self.exclusion_list = [[] for x in range(u.atoms.numberOfAtoms())]
+        #The exclusion list at the most recent depth
+        temp_list = [[] for x in range(u.atoms.numberOfAtoms())]
+        #build 1,2 terms
+        for b in u.bonds:            
+            self.exclusion_list[b.atom1.number].append(b.atom2.number)
+            self.exclusion_list[b.atom2.number].append(b.atom1.number)
+        # build 1,3 and 1,4
+        for i in range( 1 if self.exclude_14 else 2):
+            #copy
+            temp_list[:] = self.exclusion_list[:]
+            for a in range(u.atoms.numberOfAtoms()):
+                for b in range(temp_list[a]):
+                    self.exclusion_list[a].append(b) 
+
     def build_nlist(self, u):
+        
+        if(self.exclusion_list == None):
+            self._build_exclusion_list(u)
 
         self.nlist = np.resize(self.nlist, (u.atoms.numberOfAtoms() - 1) * u.atoms.numberOfAtoms())
         #check to see if nlist_lengths exists yet
@@ -398,7 +416,9 @@ class NeighborList:
             for ncell in self.cell_neighbors[icell]:
                 j = self.head[ncell]
                 while(j != - 1):
-                    if(i != j and np.sum((positions[i] - positions[j])**2) < self.cutoff ** 2):
+                    if(i != j and 
+                       not (j in self.exclusion_list[i]) and
+                       np.sum((positions[i] - positions[j])**2) < self.cutoff ** 2):
                         self.nlist[nlist_count] = j
                         self.nlist_lengths[i] += 1
                         nlist_count += 1
@@ -407,25 +427,24 @@ class NeighborList:
         self.nlist = self.nlist[:nlist_count]
         return self.nlist, self.nlist_lengths
 
-        
 
-class Pairwise(ForceCategory):
+class PairwiseCat(ForceCategory):
     """Pairwise force category. It handles constructing a neighbor-list at each time-step. 
     """
     instance = None
 
     @staticmethod
     def get_instance(cutoff):        
-        if(Pairwise.instance is None):
-            Pairwise.instance = Pairwise(cutoff)
+        if(PairwiseCat.instance is None):
+            PairwiseCat.instance = PairwiseCat(cutoff)
         else:
             #check cutoff
-            if(Pairwise.instance.cutoff != cutoff):
+            if(PairwiseCat.instance.cutoff != cutoff):
                 raise RuntimeError("Incompatible cutoffs")
-        return Pairwise.instance
+        return PairwiseCat.instance
     
     def __init__(self, cutoff=12):
-        super(Pairwise, self).__init__()
+        super(PairwiseCat, self).__init__()
         self.cutoff = cutoff                    
         self.forces = []
         self.nlist_ready = False
@@ -452,3 +471,44 @@ class Pairwise(ForceCategory):
     def _teardown_update(self):
         self._teardown()
 
+    
+class BondCat(ForceCategory):
+
+    """Bond category. It caches each atoms bonded neighbors when constructued
+    """
+    instance = None
+
+    @staticmethod
+    def get_instance():        
+        if(BondCat.instance is None):
+            BondCat.instance = BondCat()
+        return BondCat.instance
+    
+    def __init__(self):
+        super(BondCat, self).__init__()
+         self.blist_ready = False
+
+    def _build_blist(self, u):
+        self.blist = [[] for x in range(u.atoms.numberOfAtoms())]
+        for b in u.bonds:
+            self.blist[b.atom1.number].append(b.atom2.number)
+            self.blist[b.atom2.number].append(b.atom1.number)
+
+        self.blist_ready = True                    
+
+    def _setup(self, u):
+        if(not self.blist_ready):
+            self._build_blist(u)
+
+    def _teardown(self):
+        self.nlist_ready = False
+        
+    def _setup_update(self,u):
+        self._setup(u)
+
+    def _teardown_update(self):
+        self._teardown()
+
+    @property
+    def nlist():
+        return self.blist

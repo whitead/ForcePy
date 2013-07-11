@@ -10,7 +10,10 @@ import numpy as np
 # atomgroup. Initializing a residue correctly sets the residue type of
 # atoms.
 
-class CGMap:
+
+#TODO: Rewrite this as a subclass of Universe. That would be much more elegant.
+
+class CGUniverse(Universe):
     """ Class which uses center of mass mappings to reduce the number
         of degrees of freedom in a given trajectory/structure
         file. The selections define how atoms are grouped PER
@@ -18,21 +21,20 @@ class CGMap:
         atoms in that selection will be one bead in the CG system.
     """
 
-    def __init__(self, sfile, tfile, selections, names = None, collapse_hydrogens = True):
+    def __init__(self, otherUniverse, selections, names = None, collapse_hydrogens = True):
         if(names is None):
-            names = [ "%d" % x for x in range(0, len(selections) + 1)]
+            names = [ "%d" % x for x in range(0, len(selections))]
         if(len(names) != len(selections)):
             raise ValueError("Length of slections (%d) must match lenght of names (%d)" % (len(selections), len(names)))
-        self.ref_u = Universe(sfile, tfile)
-        self.ref_u.atoms.set_mass(1.0)
-        self.tar_u = AtomGroup([])
+        self.ref_u = otherUniverse
+        self.atoms = AtomGroup([])
         self.selections = selections
         self.names = names
         self.chydrogens = collapse_hydrogens
         self._build_structure()
         
 
-    def _build_structure(self):        
+    def _build_structure(self):
         index = 0
         reverse_map = {}
         residues = {}
@@ -53,7 +55,7 @@ class CGMap:
                 else:
                     residues[r.id] = Residue(r.name, r.id, [a], resnum=r.resnum)
                 #add the atom
-                self.tar_u += a
+                self.atoms += a
         
 
         #find hydrogens and collapse them into beads 
@@ -61,7 +63,7 @@ class CGMap:
             for b in self.ref_u.bonds:
                 #my hack for inferring a hydrogen
                 for a1,a2 in zip((b.atom1, b.atom2), (b.atom2, b.atom1)):
-                    if(a1.type.startwith("H") and a1.mass < 4.):
+                    if(a1.type.startswith("H") and a1.mass < 4.):
                         reverse_map[a1] = reverse_map[a2]
                         #add the mass
                         reverse_map[a1].mass += a1.mass
@@ -69,48 +71,46 @@ class CGMap:
         
         #generate matrix mappings for center of mass and sum of forces
         # A row is a mass normalized cg site defition. or unormalized 1s for forces
-        self.top_map = np.zeros( (self.tar_u.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) )
-        self.force_map = np.zeros( (self.tar_u.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) )
+        self.top_map = np.zeros( (self.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) )
+        self.force_map = np.zeros( (self.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) )
 
         for a in self.ref_u.atoms:
             self.top_map[reverse_map[a].number, a.number] = a.mass / reverse_map[a].mass
             self.force_map[reverse_map[a].number, a.number] = 1.
                                     
         #add bonds using the reverse map
+        self.bonds = set()
         for b in self.ref_u.bonds:
             cgatom1 = reverse_map[b.atom1]
             cgatom2 = reverse_map[b.atom2]
-            for cbg in self.tar_u.bonds:
+            for cbg in self.bonds:
                 if(not (cbg.atom1 in [cgatom1, cgatom2]) and not( cbg.atom2 in [cgatom1, cgatom2])):
                     #OK, no bond exists yet
-                    self.tar_u.bonds.append( Bond(cgatom1, cgatom2) )
+                    self.bonds.add( Bond(cgatom1, cgatom2) )
 
         #build cache of residues, resnames, etc
-        self.tar_u._rebuild_caches()
+        self.atoms._rebuild_caches()
         
-        #hack for creating a ``universe'' object
-        trajectory = CGReader(self.ref_u.trajectory, self.top_map, self.force_map)        
-        uwrap = UniverseWrapper(trajectory)
-        for a in self.tar_u.atoms:
-            a.universe = uwrap
+        self.trajectory = CGReader(self.ref_u.trajectory, self.top_map, self.force_map)
+        for a in self.atoms:
+            a.universe = self
             
         
 
-    def write_structure(self, sfile_out):
-        writer = MDAnalysis.coordinates.writer(sfile_out, multiframe=False)
-        writer.write(self.tar_u)
-        writer.close()
 
-        
-    def write_trajectory(self, tfile_out):
-        writer = MDAnalysis.Writer(tfile_out, self.tar_u.numberOfAtoms())
-        for ts in self.tar_u.universe.trajectory:
-            writer.write(ts)
-        writer.close()
+#    def write_structure(self, sfile_out):
+##        writer = MDAnalysis.coordinates.writer(sfile_out, multiframe=False)
+##        writer.write(self.tar_u)
+##        writer.close()
+##
+##        
+##    def write_trajectory(self, tfile_out):
+##        writer = MDAnalysis.Writer(tfile_out, self.tar_u.numberOfAtoms())
+##        for ts in self.tar_u.universe.trajectory:
+##            writer.write(ts)
+#        writer.close()
 
-class UniverseWrapper:
-    def __init__(self, traj):
-        self.trajectory = traj
+
 
 class CGReader(Reader):
     def __init__(self, aatraj, top_map, force_map):
@@ -126,7 +126,7 @@ class CGReader(Reader):
         self.numframes = aatraj.numframes
         self.skip  = aatraj.skip
         self.ts = Timestep(self.numatoms)
-        self._read_next_timestep()
+        self._read_next_timestep(ts=aatraj.ts)
         
     def close(self):
         self.aatraj.close()
@@ -141,9 +141,10 @@ class CGReader(Reader):
                 except IOError: raise StopIteration
         return iterCG()
 
-    def _read_next_timestep(self):
+    def _read_next_timestep(self, ts=None):
         try:
-            ts = self.aatraj.next()
+            if(ts is None):
+                ts = self.aatraj.next()
         except EOFError:
             raise IOError
         self.ts._unitcell = ts._unitcell
@@ -166,9 +167,10 @@ class CGReader(Reader):
         
 
 def main():
-    cg = CGMap("../test/lj.pdb", "../test/lj.xyz", ['type Ar'], ['Ar'], True)
-    cg.write_structure("foo.gro")
-    cg.write_trajectory("foo.trr")
+    cg = CGUniverse(Universe("../../../Downloads/2GHL.pdb"), ['all'], collapse_hydrogens=True)
+    cg.atoms.write("foo.pdb", bonds="all")
+    #cg.write_trajectory("foo.trr")
     
         
 if __name__ == '__main__': main()
+

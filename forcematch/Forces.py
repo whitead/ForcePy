@@ -1,4 +1,4 @@
-from .ForceMatch import Pairwise 
+from .ForceMatch import PairwiseCat 
 from .Mesh import UniformMesh 
 
 import numpy as np
@@ -107,7 +107,7 @@ class FileForce(Force):
 
 
 
-class PairwiseAnalyticForce(Force):
+class AnalyticForce(Force):
     """ A pairwise analtric force that takes in a function for
     calculating the force. The function passed should accept the
     scalar distance between the two particles as its first argument
@@ -119,16 +119,16 @@ class PairwiseAnalyticForce(Force):
     This force correctly handles types.
     """
 
-    def __init__(self, f, g, n, cutoff):
+    def __init__(self, category, f, g, n, cutoff):
         self.call_force = f
         self.call_grad = g
         self.w = np.zeros( n )
         self._setup_update_params(n)        
-        self.category = Pairwise.get_instance(cutoff)
+        self.category = category.get_instance(cutoff)
 
 
     def clone_force(self):
-        copy = PairwiseAnalyticForce(self.call_force, self.call_grad, len(self.w), self.category.cutoff)
+        copy = AnalyticForce(self.call_force, self.call_grad, len(self.w), self.category.cutoff)
         if(not self.call_potential is None):
             copy.call_potential = self.call_potential
 
@@ -211,7 +211,7 @@ class PairwiseAnalyticForce(Force):
         return self.temp_force
     
 
-class LJForce(PairwiseAnalyticForce):
+class LJForce(AnalyticForce):
     """ Lennard jones pairwise analytic force. Not shifted (!)
     """
     def __init__(self, cutoff, sigma=1, epsilon=1):
@@ -301,7 +301,7 @@ class L2Regularizer(Regularizer):
         return ln.norm(x)    
 
 
-class PairwiseSpectralForce(Force):
+class SpectralForce(Force):
     """A pairwise force that is a linear combination of basis functions
     The basis function should take two arguments: the distance and the
     mesh. Additional arguments after the function pointer will be
@@ -309,20 +309,20 @@ class PairwiseSpectralForce(Force):
     defined as so: def unit_step(x, mesh, height).
     """
     
-    def __init__(self, mesh, f, *args):
+    def __init__(self, category, mesh, f, *args):
         self.call_basis = f
         self.call_basis_args = args
         self.mesh = mesh
         self.call_potential = None
         #create weights 
         self.temp_force = np.zeros( 3 )
-        self.category = Pairwise.get_instance(mesh.max())
+        self.category = category.get_instance(mesh.max())
 
         #if this is an updatable force, set up stuff for it
         self._setup_update_params(len(mesh))
         
     def clone_force(self):
-        copy = PairwiseSpectralForce(self.mesh, self.call_basis, *self.call_basis_args)
+        copy = SpectralForce(self.mesh, self.call_basis, *self.call_basis_args)
         if(not self.call_potential is None):
             copy.call_potential = self.call_potential
         return copy           

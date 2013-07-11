@@ -1,4 +1,4 @@
-import MDAnalysis
+from MDAnalysis import Writer
 from MDAnalysis.core.AtomGroup import Universe, AtomGroup, Atom, Residue
 from MDAnalysis.coordinates.base import Timestep, Reader
 import numpy as np
@@ -31,6 +31,7 @@ class CGUniverse(Universe):
         self.selections = selections
         self.names = names
         self.chydrogens = collapse_hydrogens
+        self.universe = self
         self._build_structure()
         
 
@@ -43,10 +44,11 @@ class CGUniverse(Universe):
             if(group.numberOfAtoms() == 0):
                 raise ValueError("Selection '%s' matched no atoms" % s)        
             for r in group.residues:
-                a = Atom(index, n, n, r.name, r.id, r.atoms[0].segid, sum([x.mass for x in r]), 0) 
+                a = Atom(index, n, n, r.name, r.id, r.atoms[0].segid, sum([x.mass if x in group else 0 for x in r]), 0) 
                 index += 1
                 for ra in r.atoms:
-                    reverse_map[ra] = a
+                    if ra in group:
+                        reverse_map[ra] = a
 
                 #check to see if this residue exists yet
                 #and add the atom
@@ -71,8 +73,8 @@ class CGUniverse(Universe):
         
         #generate matrix mappings for center of mass and sum of forces
         # A row is a mass normalized cg site defition. or unormalized 1s for forces
-        self.top_map = np.zeros( (self.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) )
-        self.force_map = np.zeros( (self.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) )
+        self.top_map = np.zeros( (self.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) , dtype=np.float32)
+        self.force_map = np.zeros( (self.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) , dtype=np.float32)
 
         for a in self.ref_u.atoms:
             self.top_map[reverse_map[a].number, a.number] = a.mass / reverse_map[a].mass
@@ -88,28 +90,14 @@ class CGUniverse(Universe):
                     #OK, no bond exists yet
                     self.bonds.add( Bond(cgatom1, cgatom2) )
 
-        #build cache of residues, resnames, etc
-        self.atoms._rebuild_caches()
-        
-        self.trajectory = CGReader(self.ref_u.trajectory, self.top_map, self.force_map)
+        self.__trajectory = CGReader(self.ref_u.trajectory, self.top_map, self.force_map)
         for a in self.atoms:
             a.universe = self
             
-        
-
-
-#    def write_structure(self, sfile_out):
-##        writer = MDAnalysis.coordinates.writer(sfile_out, multiframe=False)
-##        writer.write(self.tar_u)
-##        writer.close()
-##
-##        
-##    def write_trajectory(self, tfile_out):
-##        writer = MDAnalysis.Writer(tfile_out, self.tar_u.numberOfAtoms())
-##        for ts in self.tar_u.universe.trajectory:
-##            writer.write(ts)
-#        writer.close()
-
+    
+    @property
+    def trajectory(self):
+        return self.__trajectory
 
 
 class CGReader(Reader):
@@ -149,7 +137,7 @@ class CGReader(Reader):
             raise IOError
         self.ts._unitcell = ts._unitcell
         self.ts.frame = ts.frame        
-        self.ts._pos = np.array(self.top_map.dot( ts._pos ), dtype=np.float32)
+        self.ts._pos = self.top_map.dot( ts._pos )
         try:
             self.ts._velocities = self.top_map.dot( ts._velocities ) #COM motion
         except AttributeError:
@@ -166,11 +154,16 @@ class CGReader(Reader):
         
         
 
-def main():
-    cg = CGUniverse(Universe("../../../Downloads/2GHL.pdb"), ['all'], collapse_hydrogens=True)
-    cg.atoms.write("foo.pdb", bonds="all")
-    #cg.write_trajectory("foo.trr")
+def main(*args):
+    cg = CGUniverse(Universe(args[1], args[2]), ['name OW', 'name HW1 or name HW2'], ['O', 'H2'], collapse_hydrogens=False)
+    cg.atoms.write("foo.gro", bonds="all")
+    w = Writer("foo.trr", cg.trajectory.numatoms)
+    for ts in cg.trajectory:
+        w.write(ts)
+    w.close()
     
         
-if __name__ == '__main__': main()
+if __name__ == '__main__': 
+    import sys
+    main(*sys.argv)
 

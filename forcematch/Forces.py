@@ -149,7 +149,6 @@ class Force(object):
     def calc_force_array(self, d, force):
         raise NotImplementedError("Must implement this function")
 
-                                  
     def calc_potential_array(self, d, potentials):
         raise NotImplementedError("Must implement this function")
 
@@ -207,6 +206,15 @@ class AnalyticForce(Force):
 
         return copy
 
+    def calc_force_array(self, d, forces):
+        for i in range(len(d)):
+            forces[i] = self.call_potential(d, self.w)
+
+    def calc_potential_array(self, d, potentials):
+        if(self.call_potential is None):
+            return
+        for i in range(len(d)):
+            potentials[i] = self.call_potential(d, self.w)
 
     def calc_potentials(self, u):
         if(self.call_potential is None):
@@ -377,6 +385,18 @@ class SpectralForce(Force):
         if(not self.call_potential is None):
             copy.call_potential = self.call_potential
         return copy           
+
+    def calc_force_array(self, d, forces):
+        for i in range(len(d))
+            forces[i] = self.w.dot(self.call_potential(di, self.mesh, *self.call_basis_args))        
+
+    def calc_potential_array(self, d, potentials):
+        if(self.call_potential is None):
+            return
+
+        for i in range(len(d))
+            potentials[i] = self.w.dot(self.call_potential(di, self.mesh, *self.call_basis_args))        
+
 
     def calc_potentials(self, u):
         if(self.call_potential is None):

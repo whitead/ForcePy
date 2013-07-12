@@ -1,0 +1,7 @@
+{
+    "structure" : "test/lj.pdb",
+    "trajectory" : "test/lj.xyz",
+    "kT" : 0.7,
+    "observable" : "test/lj.obs",
+    "box": [5.2, 5.2, 5.2]
+}

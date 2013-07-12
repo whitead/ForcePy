@@ -84,6 +84,79 @@ class Force(object):
         for r in regularizers:
             self.regularization.append((r.grad_fxn, r.reg_fxn))
 
+    def plot(self, force_ax, potential_ax = None, true_force = None, true_potential = None)
+        #make a mesh finer than the mesh used for finding paramers
+        self.plot_mesh = UniformMesh(self.mind(), self.maxd(), self.maxd() - self.mind() / 1000)
+        self.plot_force = np.empty( len(self.plot_mesh) )
+        self.plot_x = np.empty( np.shape(self.plot_force) )        
+
+        self.true_force = true_force
+        self.true_potential = true_potential
+        
+        self.force_ax = force_ax
+        if(potential_ax is None):
+            self.potential_ax = self.force_ax
+
+        #use center of our fine mesh and call the force calculations
+        for i in range(len(self.plot_force)):
+            self.plot_x[i] = (self.plot_mesh[i] + self.plot_mesh[i + 1]) / 2.
+        self.calc_force_array(self.plot_force)
+
+        #draw true functions, if they are given
+        if(not (true_force is None)):
+            true_force_a = np.empty( len(self.plot_mesh) )
+            for i in range(len(true_force_a)):
+                true_force_a[i] = true_force(self.plot_x[i])
+            force_ax.plot(self.plot_x, true_force_a, color="green")
+        if(not (true_potential is None) and not (self.call_potential is None)):
+            true_potential_a = np.empty( len(self.plot_mesh) )
+            for i in range(len(true_potential_a)):
+                true_potential_a[i] = true_potential(self.plot_x[i])
+            potential_ax.plot(self.plot_x, true_potential_a, color="green")
+
+        #plot force and save reference to line
+        self.force_line, = force_ax.plot(self.plot_x, self.plot_force, color="blue")
+
+        force_ax.set_ylim(1.1*min(min(self.plot_force), -max(self.plot_force)), 1.1*max(self.plot_force))
+
+        #plot potential if possible
+        if(not (potential_ax is None)):
+            self.plot_potential = np.empty( len(self.plot_mesh) )
+            self.calc_potential_array(self.plot_mesh, self.plot_potential)
+            self.potential_line, = potential_ax.plot(self.plot_x, self.plot_potential, color="green")
+            potential_ax.set_ylim(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*max(self.plot_potential))
+
+
+    def update_plot(self):
+        #use center of our fine mesh and call the force calculations
+        for i in range(len(self.plot_force)):
+            self.plot_x[i] = (self.plot_mesh[i] + self.plot_mesh[i + 1]) / 2.
+        self.calc_force_array(self.plot_force)
+        self.force_line.set_ydata(self.true_force_a)
+
+        #plot force and save reference to line
+        self.force_line, = self.force_ax.plot(self.plot_x, self.plot_force, color="blue")
+        self.force_ax.set_ylim(1.1*min(min(self.plot_force), -max(self.plot_force)), 1.1*max(self.plot_force))
+
+        #plot potential if possible
+        if(not (self.potential_ax is None)):
+            self.calc_potential_array(self.plot_mesh, self.plot_potential)
+            self.potential_line.set_ydata(self.plot_potential)
+            self.potential_ax.set_ylim(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*max(self.plot_potential))
+
+        
+                                  
+    def calc_force_array(self, d, force):
+        raise NotImplementedError("Must implement this function")
+
+                                  
+    def calc_potential_array(self, d, potentials):
+        raise NotImplementedError("Must implement this function")
+
+    def calc_potentials(self, u):
+        raise NotImplementedError("Must implement this function")
+
+
     def calc_forces(self, forces, u):
         raise NotImplementedError("Must implement this function")
 
@@ -135,7 +208,7 @@ class AnalyticForce(Force):
         return copy
 
 
-    def calc_potential(self, u):
+    def calc_potentials(self, u):
         if(self.call_potential is None):
             return 0
 
@@ -196,9 +269,7 @@ class AnalyticForce(Force):
 
         positions = u.atoms.get_positions()
         nlist_accum = np.sum(self.category.nlist_lengths[:i]) if i > 0  else 0
-        #for weaving
-        w_length = len(self.w)
-        temp_grad = self.temp_grad
+
         for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
             if(not self.mask2[j]):
                 continue
@@ -231,26 +302,6 @@ class LJForce(AnalyticForce):
     @staticmethod
     def dlj(d, w):
         return np.asarray([4 * (6 * (w[1] / d) ** 7 - 12 * (w[1] / d) ** 13), 4 * w[0] * (42 * (w[1] / d) ** 6 - 156 * (w[1] / d) ** 12)])
-
-    def plot(self, outfile, alt=None):
-        mesh = UniformMesh(0, max(5,self.w[0] * 3), 0.01)
-        force = np.empty( len(mesh) )
-        if(not alt is None):
-            alt_force = np.empty( len(mesh) )
-        x = np.empty( np.shape(force) )
-        for i in range(len(force)):
-            x[i] = (mesh[i] + mesh[i + 1]) / 2.
-            force[i] = LJForce.lj(x[i], self.w)
-            if(not alt is None):
-                alt_force[i] = LJForce.lj(x[i], alt)
-        fig = plt.figure(figsize=(8, 6), dpi=80)
-        ax = plt.subplot(1,1,1)
-        ax.plot(x, force, color="blue")
-        if(not alt is None): 
-            ax.plot(x, alt_force, color="red")
-        ax.axis([min(x), max(x), min(-1, self.w[1] * -2), max(1, self.w[1] * 5)])
-        fig.tight_layout()
-        plt.savefig(outfile)
                                   
 
 
@@ -327,7 +378,7 @@ class SpectralForce(Force):
             copy.call_potential = self.call_potential
         return copy           
 
-    def calc_potential(self, u):
+    def calc_potentials(self, u):
         if(self.call_potential is None):
             return 0
 
@@ -424,95 +475,3 @@ class SpectralForce(Force):
             #self.temp_grad +=  np.outer(temp, r)
         return force
 
-    def update_plot(self, true_force=None, true_potential=None):
-
-        #if this is first call, we need to call plot
-        try:
-            self.current_fig
-        except AttributeError:
-            self.plot(None, true_force, true_potential)
-            return
-        
-        #use center of our fine mesh and call the force calculations
-        for i in range(len(self.plot_force)):
-            self.plot_force[i] = self.w * np.asmatrix(self.call_basis(self.plot_x[i], self.mesh, *self.call_basis_args).reshape((len(self.w), 1)))
-
-        #restore cache, update plot, redraw only force            
-        force_ax = self.current_fig.get_axes()[0]
-        self.force_line.set_ydata(self.plot_force)
-        force_ax.set_ylim(1.1*min(min(self.plot_force), -max(self.plot_force)), 1.1*max(self.plot_force))
-            
-        #plot potential if necessary
-        if(not (self.call_potential is None)):
-            for i in range(len(self.plot_force)):
-                self.plot_potential[i] = self.w * np.asmatrix(self.call_potential(self.plot_x[i], self.mesh, *self.call_basis_args).reshape((len(self.w), 1)))
-
-            #restore cache, update plot, redraw only potential
-            potential_ax = self.current_fig.get_axes()[1]
-            self.potential_line.set_ydata(self.plot_potential)
-            potential_ax.set_ylim(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*max(self.plot_potential))
-
-        plt.draw()
-
-    def plot(self, outfile=None, true_force=None, true_potential=None):
-
-        #make a mesh finer than the mesh used for finding paramers
-        self.plot_mesh = UniformMesh(self.mesh.min(), self.mesh.max(), self.mesh.dx / 2)
-        self.plot_force = np.empty( len(self.plot_mesh) )
-        self.plot_x = np.empty( np.shape(self.plot_force) )        
-
-        
-        #set up figure and check to see if we're plotting the potential
-        self.current_fig = plt.figure(figsize=(16, 12), dpi=80)
-
-        if(self.call_potential is None):
-            force_ax = plt.subplot(111)
-
-        else:
-            force_ax = plt.subplot(211)
-            potential_ax = plt.subplot(212)
-
-        #use center of our fine mesh and call the force calculations
-        for i in range(len(self.plot_force)):
-            self.plot_x[i] = (self.plot_mesh[i] + self.plot_mesh[i + 1]) / 2.
-            self.plot_force[i] = self.w * np.asmatrix(self.call_basis(self.plot_x[i], self.mesh, *self.call_basis_args).reshape((len(self.w), 1)))
-
-
-        #draw true functions, if they are given
-        if(not (true_force is None)):
-            force = np.empty( len(self.plot_mesh) )
-            for i in range(len(force)):
-                force[i] = true_force(self.plot_x[i])
-            force_ax.plot(self.plot_x, force, color="red")
-        if(not (true_potential is None) and not (self.call_potential is None)):
-            potential = np.empty( len(self.plot_mesh) )
-            for i in range(len(potential)):
-                potential[i] = true_potential(self.plot_x[i])
-            potential_ax.plot(self.plot_x, potential, color="red")
-
-        #plot force and save reference to line
-        self.force_line, = force_ax.plot(self.plot_x, self.plot_force, color="blue")
-
-        force_ax.set_ylim(1.1*min(min(self.plot_force), -max(self.plot_force)), 1.1*max(self.plot_force))
-
-        #plot potential if possible
-        if(not (self.call_potential is None)):
-            self.plot_potential = np.empty( len(self.plot_mesh) )
-            for i in range(len(self.plot_force)):
-                self.plot_potential[i] = self.w * np.asmatrix(self.call_potential(self.plot_x[i], self.mesh, *self.call_basis_args).reshape((len(self.w), 1)))
-
-            self.potential_line, = potential_ax.plot(self.plot_x, self.plot_potential, color="green")
-            potential_ax.set_ylim(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*max(self.plot_potential))
-
-        #make layout tighter
-        self.current_fig.tight_layout()
-        
-        #cache background
-
-        #show or output to file
-        if(outfile is None):
-            plt.ion()
-            plt.show()
-        else:
-            plt.savefig(outfile)
-                                  

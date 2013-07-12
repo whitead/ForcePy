@@ -7,6 +7,9 @@ from MDAnalysis import Universe
 from scipy import weave
 from scipy.weave import converters
 from math import ceil, log, exp, sqrt
+import matplotlib.mlab as mlab
+import matplotlib.pyplot as plt
+
 
 class ForceMatch:
     """Main force match class.
@@ -17,10 +20,11 @@ class ForceMatch:
         self.tar_cats = []
         self.ref_forces =  []
         self.tar_forces = []
-        self.u = aauniverse
+        self.u = cguniverse
         self._load_json(input_file) 
         self.force_match_calls = 0
         self.plot_frequency = 10
+        self.plot_output = None
     
     def _load_json(self, input_file):
         with open(input_file, 'r') as f:
@@ -84,6 +88,19 @@ class ForceMatch:
         
         ref_forces = np.zeros( (self.u.atoms.numberOfAtoms(), 3) )
         self.u.trajectory.rewind() # just in case this is called after some analysis has been done
+        
+        #setup plots
+        if(self.plot_frequency != -1):
+            plot_fig = plt.figure()
+            if(self.plot_output is None):
+                plt.ion()                        
+            #set-up plots for 16/9 screen
+            plot_w = ceil(sqrt(len(self.tar_forces)) * 3 / 4.)
+            plot_h = ceil(plot_w * 9. / 16.)
+            for i in range(len(self.tar_forces)):
+                self.tar_forces[i].plot(plt.subplot(plot_w, plot_h, i+1))
+            plt.show()
+                
 
         for ts in self.u.trajectory:
             
@@ -100,15 +117,10 @@ class ForceMatch:
                 rf.calc_forces(ref_forces, self.u)            
 
             #make plots
-            if(iterations % self.plot_frequency == 0):
-                for f in self.tar_forces:
-                    f.update_plot(true_force=lambda x:4 * (6 * x**(-7) - 12 * x**(-13) ), true_potential=lambda x: 4 * (x**(-12) - x**(-6)))
-                    try:
-                        pass
-                        #f.update_plot(true_force=lambda x:4 * (6 * x**(-7) - 12 * x**(-13) ), true_potential=lambda x: 4 * (x**(-12) - x**(-6)))
-                    except AttributeError:
-                        #doesn't have plotting method, oh well
-                        pass
+                if(self.plot_frequency != -1 and iterations % self.plot_frequency == 0):
+                    for f in self.tar_forces:
+                        f.update_plot()
+                    plt.draw()
 
             #track error
             net_df = 0
@@ -161,6 +173,9 @@ class ForceMatch:
             iterations -= 1
             if(iterations == 0):
                 break
+        if(not self.plot_output is None):
+            plot_fig.tight_layout()
+            plt.savefig(self.plot_output)
 
 
     def observation_match(self, obs_sweeps = 25, obs_samples = None, reject_tol = None):
@@ -319,7 +334,7 @@ class ForceCategory(object):
 class NeighborList:
     """Neighbor list class
     """
-    def __init__(self, u, cutoff):
+    def __init__(self, u, cutoff, exclude_14 = True):
         
         #set up cell number and data
         self.cutoff = cutoff
@@ -331,6 +346,8 @@ class NeighborList:
         self.bins_ready = False
         self.cells = np.empty(u.atoms.numberOfAtoms(), dtype='int32')
         self.head = np.empty( reduce(lambda x,y: x * y, self.cell_number), dtype='int32')
+        self.exclusion_list = None
+        self.exclude_14 = exclude_14
 
         #pre-compute neighbors. Waste of space, but saves programming effort required for ghost cellls
         self.cell_neighbors = [[] for x in range(len(self.head))]
@@ -389,7 +406,7 @@ class NeighborList:
             #copy
             temp_list[:] = self.exclusion_list[:]
             for a in range(u.atoms.numberOfAtoms()):
-                for b in range(temp_list[a]):
+                for b in range(len(temp_list[a])):
                     self.exclusion_list[a].append(b) 
 
     def build_nlist(self, u):
@@ -428,23 +445,23 @@ class NeighborList:
         return self.nlist, self.nlist_lengths
 
 
-class PairwiseCat(ForceCategory):
+class Pairwise(ForceCategory):
     """Pairwise force category. It handles constructing a neighbor-list at each time-step. 
     """
     instance = None
 
     @staticmethod
-    def get_instance(cutoff):        
-        if(PairwiseCat.instance is None):
-            PairwiseCat.instance = PairwiseCat(cutoff)
+    def get_instance(*args):        
+        if(Pairwise.instance is None):
+            Pairwise.instance = Pairwise(args[0])
         else:
             #check cutoff
-            if(PairwiseCat.instance.cutoff != cutoff):
+            if(Pairwise.instance.cutoff != args[0]):
                 raise RuntimeError("Incompatible cutoffs")
-        return PairwiseCat.instance
+        return Pairwise.instance
     
     def __init__(self, cutoff=12):
-        super(PairwiseCat, self).__init__()
+        super(Pairwise, self).__init__()
         self.cutoff = cutoff                    
         self.forces = []
         self.nlist_ready = False
@@ -472,21 +489,22 @@ class PairwiseCat(ForceCategory):
         self._teardown()
 
     
-class BondCat(ForceCategory):
+class Bond(ForceCategory):
 
     """Bond category. It caches each atoms bonded neighbors when constructued
     """
     instance = None
 
     @staticmethod
-    def get_instance():        
-        if(BondCat.instance is None):
-            BondCat.instance = BondCat()
-        return BondCat.instance
+    def get_instance(*args):        
+        if(Bond.instance is None):
+            Bond.instance = Bond()
+        return Bond.instance
     
     def __init__(self):
-        super(BondCat, self).__init__()
-         self.blist_ready = False
+        super(Bond, self).__init__()
+        self.blist_ready = False
+    
 
     def _build_blist(self, u):
         self.blist = [[] for x in range(u.atoms.numberOfAtoms())]

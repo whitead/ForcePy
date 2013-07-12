@@ -1,11 +1,9 @@
-from .ForceMatch import PairwiseCat 
+from .ForceMatch import Pairwise
 from .Mesh import UniformMesh 
 
 import numpy as np
 import random
 import numpy.linalg as ln
-import matplotlib.pyplot as plt
-import matplotlib.mlab as mlab
 from MDAnalysis import Universe
 from math import ceil,log
 from scipy import weave
@@ -84,11 +82,11 @@ class Force(object):
         for r in regularizers:
             self.regularization.append((r.grad_fxn, r.reg_fxn))
 
-    def plot(self, force_ax, potential_ax = None, true_force = None, true_potential = None)
+    def plot(self, force_ax, potential_ax = None, true_force = None, true_potential = None):
         #make a mesh finer than the mesh used for finding paramers
-        self.plot_mesh = UniformMesh(self.mind(), self.maxd(), self.maxd() - self.mind() / 1000)
-        self.plot_force = np.empty( len(self.plot_mesh) )
-        self.plot_x = np.empty( np.shape(self.plot_force) )        
+        self.plot_x = np.arange( self.mind(), self.maxd(), (self.maxd() - self.mind()) / 1000. )
+        self.plot_force = np.empty( len(self.plot_x) )
+
 
         self.true_force = true_force
         self.true_potential = true_potential
@@ -97,19 +95,17 @@ class Force(object):
         if(potential_ax is None):
             self.potential_ax = self.force_ax
 
-        #use center of our fine mesh and call the force calculations
-        for i in range(len(self.plot_force)):
-            self.plot_x[i] = (self.plot_mesh[i] + self.plot_mesh[i + 1]) / 2.
-        self.calc_force_array(self.plot_force)
+        #call the force calculations
+        self.calc_force_array(self.plot_x, self.plot_force)
 
         #draw true functions, if they are given
         if(not (true_force is None)):
-            true_force_a = np.empty( len(self.plot_mesh) )
+            true_force_a = np.empty( len(self.plot_x) )
             for i in range(len(true_force_a)):
                 true_force_a[i] = true_force(self.plot_x[i])
             force_ax.plot(self.plot_x, true_force_a, color="green")
         if(not (true_potential is None) and not (self.call_potential is None)):
-            true_potential_a = np.empty( len(self.plot_mesh) )
+            true_potential_a = np.empty( len(self.plot_x) )
             for i in range(len(true_potential_a)):
                 true_potential_a[i] = true_potential(self.plot_x[i])
             potential_ax.plot(self.plot_x, true_potential_a, color="green")
@@ -120,29 +116,32 @@ class Force(object):
         force_ax.set_ylim(1.1*min(min(self.plot_force), -max(self.plot_force)), 1.1*max(self.plot_force))
 
         #plot potential if possible
-        if(not (potential_ax is None)):
-            self.plot_potential = np.empty( len(self.plot_mesh) )
-            self.calc_potential_array(self.plot_mesh, self.plot_potential)
-            self.potential_line, = potential_ax.plot(self.plot_x, self.plot_potential, color="green")
-            potential_ax.set_ylim(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*max(self.plot_potential))
+        try:
+            self.plot_potential = np.empty( len(self.plot_x) )
+            self.calc_potential_array(self.plot_x, self.plot_potential)
+            self.potential_line, = self.potential_ax.plot(self.plot_x, self.plot_potential, color="red")
+            if(self.force_ax == self.potential_ax):
+                self.potential_ax.set_ylim(min(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*min(min(self.plot_force), -max(self.plot_force))), max(1.1*max(self.plot_force), 1.1*max(self.plot_potential)))
+            else:
+                self.potential_ax.set_ylim(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*max(self.plot_potential))
+        except NotImplementedError:
+            self.plot_potential = None
 
 
     def update_plot(self):
-        #use center of our fine mesh and call the force calculations
-        for i in range(len(self.plot_force)):
-            self.plot_x[i] = (self.plot_mesh[i] + self.plot_mesh[i + 1]) / 2.
-        self.calc_force_array(self.plot_force)
-        self.force_line.set_ydata(self.true_force_a)
-
-        #plot force and save reference to line
-        self.force_line, = self.force_ax.plot(self.plot_x, self.plot_force, color="blue")
+        #call the force calculations
+        self.calc_force_array(self.plot_x, self.plot_force)
+        self.force_line.set_ydata(self.plot_force)
         self.force_ax.set_ylim(1.1*min(min(self.plot_force), -max(self.plot_force)), 1.1*max(self.plot_force))
 
         #plot potential if possible
-        if(not (self.potential_ax is None)):
-            self.calc_potential_array(self.plot_mesh, self.plot_potential)
+        if(not (self.plot_potential is None)):
+            self.calc_potential_array(self.plot_x, self.plot_potential)
             self.potential_line.set_ydata(self.plot_potential)
-            self.potential_ax.set_ylim(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*max(self.plot_potential))
+            if(self.force_ax == self.potential_ax):
+                self.potential_ax.set_ylim(min(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*min(min(self.plot_force), -max(self.plot_force))), max(1.1*max(self.plot_force), 1.1*max(self.plot_potential)))
+            else:
+                self.potential_ax.set_ylim(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*max(self.plot_potential))
 
         
                                   
@@ -154,7 +153,6 @@ class Force(object):
 
     def calc_potentials(self, u):
         raise NotImplementedError("Must implement this function")
-
 
     def calc_forces(self, forces, u):
         raise NotImplementedError("Must implement this function")
@@ -191,7 +189,7 @@ class AnalyticForce(Force):
     This force correctly handles types.
     """
 
-    def __init__(self, category, f, g, n, cutoff):
+    def __init__(self, category, f, g, n, cutoff=None):
         self.call_force = f
         self.call_grad = g
         self.w = np.zeros( n )
@@ -206,15 +204,25 @@ class AnalyticForce(Force):
 
         return copy
 
+    def mind(self):
+        return 0
+
+    def maxd(self):
+        try:
+            return category.cutoff
+        except AttributeError:
+            return 10
+
+
     def calc_force_array(self, d, forces):
         for i in range(len(d)):
-            forces[i] = self.call_potential(d, self.w)
+            forces[i] = self.call_potential(d[i], self.w)
 
     def calc_potential_array(self, d, potentials):
         if(self.call_potential is None):
             return
         for i in range(len(d)):
-            potentials[i] = self.call_potential(d, self.w)
+            potentials[i] = self.call_potential(d[i], self.w)
 
     def calc_potentials(self, u):
         if(self.call_potential is None):
@@ -294,7 +302,7 @@ class LJForce(AnalyticForce):
     """ Lennard jones pairwise analytic force. Not shifted (!)
     """
     def __init__(self, cutoff, sigma=1, epsilon=1):
-        super(LJForce, self).__init__(LJForce.lj, LJForce.dlj, 2, cutoff)
+        super(LJForce, self).__init__(Pairwise, LJForce.lj, LJForce.dlj, 2, cutoff)
         self.set_potential(LJForce.ulj)
         self.w[0] = epsilon
         self.w[1] = sigma
@@ -311,6 +319,11 @@ class LJForce(AnalyticForce):
     def dlj(d, w):
         return np.asarray([4 * (6 * (w[1] / d) ** 7 - 12 * (w[1] / d) ** 13), 4 * w[0] * (42 * (w[1] / d) ** 6 - 156 * (w[1] / d) ** 12)])
                                   
+    def mind(self):
+        return w[1] * 0.5
+    
+    def maxd(self):
+        return w[1] * 5
 
 
 class Regularizer:
@@ -379,23 +392,28 @@ class SpectralForce(Force):
 
         #if this is an updatable force, set up stuff for it
         self._setup_update_params(len(mesh))
+
+    def mind(self):
+        return self.mesh.min()
+
+    def maxd(self):
+        return self.mesh.max()
         
     def clone_force(self):
-        copy = SpectralForce(self.mesh, self.call_basis, *self.call_basis_args)
+        copy = SpectralForce(self.category.__class__, self.mesh, self.call_basis, *self.call_basis_args)
         if(not self.call_potential is None):
             copy.call_potential = self.call_potential
         return copy           
 
     def calc_force_array(self, d, forces):
-        for i in range(len(d))
-            forces[i] = self.w.dot(self.call_potential(di, self.mesh, *self.call_basis_args))        
+        for i in range(len(d)):
+            forces[i] = self.w.dot(self.call_basis(d[i], self.mesh, *self.call_basis_args))        
 
     def calc_potential_array(self, d, potentials):
         if(self.call_potential is None):
             return
-
-        for i in range(len(d))
-            potentials[i] = self.w.dot(self.call_potential(di, self.mesh, *self.call_basis_args))        
+        for i in range(len(d)):
+            potentials[i] = self.w.dot(self.call_potential(d[i], self.mesh, *self.call_basis_args))        
 
 
     def calc_potentials(self, u):

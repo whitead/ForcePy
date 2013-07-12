@@ -99,6 +99,17 @@ class CGUniverse(Universe):
     def trajectory(self):
         return self.__trajectory
 
+    def write_structure(filename, *args):
+        self.atoms.write(filename, *args)
+
+
+    def write_trajectory(filename):
+        w = Writer(filename, self.atoms.numberOfAtoms())
+        for ts in self.trajectory:
+            w.write(ts)
+        w.close()
+
+        
 
 class CGReader(Reader):
     def __init__(self, aatraj, top_map, force_map):
@@ -130,11 +141,8 @@ class CGReader(Reader):
         return iterCG()
 
     def _read_next_timestep(self, ts=None):
-        try:
-            if(ts is None):
-                ts = self.aatraj.next()
-        except EOFError:
-            raise IOError
+        if(ts is None):
+            ts = self.aatraj.next()
         self.ts._unitcell = ts._unitcell
         self.ts.frame = ts.frame        
         self.ts._pos = self.top_map.dot( ts._pos )
@@ -156,11 +164,8 @@ class CGReader(Reader):
 
 def main(*args):
     cg = CGUniverse(Universe(args[1], args[2]), ['name OW', 'name HW1 or name HW2'], ['O', 'H2'], collapse_hydrogens=False)
-    cg.atoms.write("foo.gro", bonds="all")
-    w = Writer("foo.trr", cg.trajectory.numatoms)
-    for ts in cg.trajectory:
-        w.write(ts)
-    w.close()
+    cg.write_structure("foo.gro", bonds="all")
+    cg.write_trajectory("foo.trr")
     
         
 if __name__ == '__main__': 

@@ -6,7 +6,7 @@ from math import ceil
 from MDAnalysis import Universe
 from scipy import weave
 from scipy.weave import converters
-from math import ceil, log, exp, sqrt
+from math import *
 import matplotlib.mlab as mlab
 import matplotlib.pyplot as plt
 
@@ -23,13 +23,13 @@ class ForceMatch:
         self.u = cguniverse
         self._load_json(input_file) 
         self.force_match_calls = 0
-        self.plot_frequency = 10
+        self.plot_frequency = 1
         self.plot_output = None
     
     def _load_json(self, input_file):
         with open(input_file, 'r') as f:
             self.json = json.load(f)
-        self._test_json(self.json)
+        self._test_json(self.json, [])
         self.kt = self.json["kT"]
         if("observable" in self.json):
             self.do_obs = True
@@ -41,7 +41,9 @@ class ForceMatch:
                                   (len(self.obs), len(lines)))
                 for i, line in zip(range(len(self.obs)), lines[:len(self.obs)]):
                     self.obs[i] = float(line.split()[0])
-
+            if("observable_set" in self.json):
+                self.obs = np.apply_along_axis(lambda x:(x - self.json["observable_set"]) ** 2, 0, self.obs)
+                print "setting observable to %g" % self.json["observable_set"]
 
         if("box" in self.json):
             if(len(self.json["box"]) != 3):
@@ -91,11 +93,24 @@ class ForceMatch:
         
         #setup plots
         if(self.plot_frequency != -1):
+
             plot_fig = plt.figure()
+
+            #try to maximize the window
+            mng = plt.get_current_fig_manager()
+            try:
+                mng.frame.Maximize(True)
+            except AttributeError:
+                try:
+                    mng.resize(*mng.window.maxsize())
+                except AttributeError:
+                    pass
+
+
             if(self.plot_output is None):
                 plt.ion()                        
             #set-up plots for 16/9 screen
-            plot_w = ceil(sqrt(len(self.tar_forces)) * 3 / 4.)
+            plot_w = ceil(sqrt(len(self.tar_forces)) * 4 / 3.)
             plot_h = ceil(plot_w * 9. / 16.)
             for i in range(len(self.tar_forces)):
                 self.tar_forces[i].plot(plt.subplot(plot_w, plot_h, i+1))
@@ -291,9 +306,10 @@ class ForceMatch:
                 types.append(a.type)
         for i in range(len(types)):
             for j in range(i,len(types)):
-                f = force.clone_force()
-                f.specialize_types("type %s" % types[i], "type %s" % types[j])
-                self.add_tar_force(f)
+                if(force.category.pair_exists(self.u, "type %s" % types[i], "type %s" % types[j])):
+                    f = force.clone_force()
+                    f.specialize_types("type %s" % types[i], "type %s" % types[j])
+                    self.add_tar_force(f)
 
     def _sample_ts(self):        
         self.u.trajectory.rewind()
@@ -339,7 +355,7 @@ class NeighborList:
         #set up cell number and data
         self.cutoff = cutoff
         self.box = [(0,x) for x in u.dimensions[:3]]
-        #self.box = [(0,5.2) for x in u.dimensions[:3]]
+        self.img = u.dimensions[:3]
         self.nlist_lengths = np.arange(0, dtype='int32')
         self.nlist = np.arange(0, dtype='int32')
         self.cell_number = [max(1,int(ceil((x[1] - x[0]) / self.cutoff))) for x in self.box]        
@@ -371,6 +387,8 @@ class NeighborList:
                                 if(not neighbor in self.cell_neighbors[index]): #this is possible if wrapped and cell number is 1
                                     self.cell_neighbors[index].append(neighbor)
 
+
+
     def dump_cells(self):
         print self.cell_number
         print self.box
@@ -384,7 +402,10 @@ class NeighborList:
             icell = 0
             #fancy index and binning loop over dimensions
             for j in range(3):                
-                icell = int((positions[i][j] - self.box[j][0]) / (self.box[j][1] - self.box[j][0]) * self.cell_number[j]) + icell * self.cell_number[j]                
+                #sometimes things are unwrapped, better to assume they aren't
+                k = (positions[i][j] -  self.box[j][0]) / (self.box[j][1] - self.box[j][0]) * self.cell_number[j]
+                k = floor(k % self.cell_number[j])      
+                icell =  int(k) + icell * self.cell_number[j]
             #push what is on the head into the cells
             self.cells[i] = self.head[icell]
             #add current value
@@ -429,13 +450,16 @@ class NeighborList:
             icell = 0
             #fancy indepx and binning loop over dimensions
             for j in range(3):
-                icell = int((positions[i][j] - self.box[j][0]) / (self.box[j][1] - self.box[j][0]) * self.cell_number[j]) + icell * self.cell_number[j]          
+                #sometimes things are unwrapped, better to assume they aren't
+                k = (positions[i][j] -  self.box[j][0]) / (self.box[j][1] - self.box[j][0]) * self.cell_number[j]
+                k = floor(k % self.cell_number[j])      
+                icell =  int(k) + icell * self.cell_number[j]
             for ncell in self.cell_neighbors[icell]:
                 j = self.head[ncell]
                 while(j != - 1):
                     if(i != j and 
                        not (j in self.exclusion_list[i]) and
-                       np.sum((positions[i] - positions[j])**2) < self.cutoff ** 2):
+                       min_img_dist_sq(positions[i],positions[j],self.img) < self.cutoff ** 2):
                         self.nlist[nlist_count] = j
                         self.nlist_lengths[i] += 1
                         nlist_count += 1
@@ -488,6 +512,9 @@ class Pairwise(ForceCategory):
     def _teardown_update(self):
         self._teardown()
 
+    def pair_exists(self, u, type1, type2):
+        return True
+
     
 class Bond(ForceCategory):
 
@@ -507,12 +534,25 @@ class Bond(ForceCategory):
     
 
     def _build_blist(self, u):
-        self.blist = [[] for x in range(u.atoms.numberOfAtoms())]
+        temp = [[] for x in range(u.atoms.numberOfAtoms())]
+        #could be at most everything bonded with everything
+        self.blist = np.empty((u.atoms.numberOfAtoms() - 1) * (u.atoms.numberOfAtoms() / 2), dtype=np.int32)
+        self.blist_lengths = np.empty(u.atoms.numberOfAtoms(), dtype=np.int32)
+        blist_accum = 0
         for b in u.bonds:
-            self.blist[b.atom1.number].append(b.atom2.number)
-            self.blist[b.atom2.number].append(b.atom1.number)
+            temp[b.atom1.number].append(b.atom2.number)
+            temp[b.atom2.number].append(b.atom1.number)
 
-        self.blist_ready = True                    
+        #unwrap the bond list to make it look like neighbor lists
+        for i,bl in zip(range(u.atoms.numberOfAtoms()), temp):
+            self.blist_lengths[i] = len(temp[i])
+            for b in bl:
+                self.blist[blist_accum] = b
+                blist_accum += 1
+
+        #resize now we know how many bond items there are
+        self.blist = self.blist[:blist_accum]
+        self.blist_ready = True
 
     def _setup(self, u):
         if(not self.blist_ready):
@@ -528,5 +568,89 @@ class Bond(ForceCategory):
         self._teardown()
 
     @property
-    def nlist():
+    def nlist(self):
         return self.blist
+
+    @property
+    def nlist_lengths(self):
+        return self.blist_lengths
+
+    def pair_exists(self, u, type1, type2):
+        """Check to see if a there exist any pairs of the two types given
+        """
+        if(not self.blist_ready):
+            self._build_blist(u)        
+
+        sel2 = u.atoms.selectAtoms(type2)        
+        for a in u.atoms.selectAtoms(type1):
+            i = a.number
+            blist_accum = np.sum(self.blist_lengths[:i]) if i > 0  else 0
+            for j in self.blist[blist_accum:(blist_accum + self.blist_lengths[i])]:
+                if(u.atoms[int(j)] in sel2):
+                    return True
+
+        return False
+
+
+
+def min_img_vec(x, y, img, periodic=True):
+    dx = x - y
+    if(periodic):
+        dx -= np.round(dx / img[:3]) * img[:3]
+    return dx
+    
+def min_img_dist(x, y, img, periodic=True):
+    if(not periodic):
+        return sqrt(np.sum((x - y)**2))
+
+    code = """
+           #line 553 "ForceMatch.py"
+           double sum = 0;
+           double dx;
+           double div;          
+           for(int i = 0; i < 3; i++) {
+               dx = x(i) - y(i);
+               div = dx / img(i);
+               dx -= div < 0.0 ? ceil(div - 0.5) : floor(div + 0.5);
+               sum += dx;
+            }
+            return_val = sqrt(sum);
+            """
+    return weave.inline(code, ['x', 'y', 'img'],
+                        type_converters=converters.blitz,
+                        compiler = 'gcc',
+                        headers=['<math.h>'],
+                        libraries=['m'])
+
+    #return ln.norm(min_img_vec(x,y,img, periodic))
+
+def min_img_dist_sq(x, y, img, periodic=True):
+
+    if(not periodic):
+        return np.sum((x - y)**2)
+
+    code = """
+           #line 579  "ForceMatch.py"
+           double sum = 0;
+           double dx;
+           double div;          
+           for(int i = 0; i < 3; i++) {
+               dx = x(i) - y(i);
+               div = dx / img(i);
+               dx -= div < 0.0 ? ceil(div - 0.5) : floor(div + 0.5);
+               sum += dx;
+            }
+            return_val = sum;
+            """
+    return weave.inline(code, ['x', 'y', 'img'],
+                        type_converters=converters.blitz,
+                        compiler = 'gcc',
+                        headers=['<math.h>'],
+                        libraries=['m'])
+
+    #return np.sum(min_img_vec(x,y,img, periodic)**2)
+
+def min_img(x, img, periodic=True):
+    if(periodic):
+        x -= np.floor(dx / img[:3]) * img[:3]
+    return x

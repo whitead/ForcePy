@@ -1,4 +1,4 @@
-from .ForceMatch import Pairwise
+from .ForceMatch import Pairwise, min_img_vec
 from .Mesh import UniformMesh 
 
 import numpy as np
@@ -14,7 +14,7 @@ class Force(object):
 
        To be used in the stochastic gradient step, a force should implement all of the methods here
     """
-    
+
     def _setup_update_params(self, w_dim, initial_w=-1):
         try:
             if(w_dim != len(initial_w)):
@@ -57,6 +57,7 @@ class Force(object):
     def specialize_types(self, selection_pair_1 = None, selection_pair_2 = None):
         self.sel1 = selection_pair_1
         self.sel2 = selection_pair_2
+        self.type_name = "[%s] -- [%s]" % (selection_pair_1, selection_pair_2)
 
 
     def _build_mask(self, sel1, sel2, u):
@@ -92,8 +93,21 @@ class Force(object):
         self.true_potential = true_potential
         
         self.force_ax = force_ax
+        
+        #set the plot title
+        try:
+            title = "Force" #in case no plot_title
+            title = self.plot_name #if there is a plot_title
+            title = "%s type %s" % (title, self.type_name) #if this is specialized
+        except AttributeError:
+            pass
+        
+        force_ax.set_title(title)
+        
         if(potential_ax is None):
             self.potential_ax = self.force_ax
+        else:
+            self.potential_ax.set_title("Potential of %s" % title)
 
         #call the force calculations
         self.calc_force_array(self.plot_x, self.plot_force)
@@ -195,6 +209,7 @@ class AnalyticForce(Force):
         self.w = np.zeros( n )
         self._setup_update_params(n)        
         self.category = category.get_instance(cutoff)
+        self.plot_name = "AnalyticForce for %s" % category.__name__
 
 
     def clone_force(self):
@@ -243,7 +258,7 @@ class AnalyticForce(Force):
                 #do not double count
                 if(not maskj[j] or i < j):
                     continue
-                r = positions[j] - positions[i]
+                r = min_img_vec(positions[j], positions[i], u.trajectory.ts.dimensions, u.trajectory.periodic)
                 d = ln.norm(r)            
                 potential += self.call_potential(d,self.w)
             nlist_accum += self.category.nlist_lengths[i]
@@ -265,7 +280,7 @@ class AnalyticForce(Force):
             for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
                 if(not maskj[j]):
                     continue
-                r = positions[j] - positions[i]
+                r = min_img_vec(positions[j], positions[i], u.trajectory.ts.dimensions, u.trajectory.periodic)
                 d = ln.norm(r)
                 forces[i] += self.call_force(d,self.w) * (r / d)
             nlist_accum += self.category.nlist_lengths[i]
@@ -289,7 +304,7 @@ class AnalyticForce(Force):
         for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
             if(not self.mask2[j]):
                 continue
-            r = positions[j] - positions[i]
+            r = min_img_vec(positions[j], positions[i], u.trajectory.ts.dimensions, u.trajectory.periodic)
             d = ln.norm(r)
             r = r / d            
             self.temp_force += self.call_force(d, self.w) * r
@@ -306,6 +321,7 @@ class LJForce(AnalyticForce):
         self.set_potential(LJForce.ulj)
         self.w[0] = epsilon
         self.w[1] = sigma
+        self.plot_name = "LJForce"
         
     @staticmethod
     def lj(d, w):
@@ -389,6 +405,7 @@ class SpectralForce(Force):
         #create weights 
         self.temp_force = np.zeros( 3 )
         self.category = category.get_instance(mesh.max())
+        self.plot_name = "SpectralForce for %s" % category.__name__
 
         #if this is an updatable force, set up stuff for it
         self._setup_update_params(len(mesh))
@@ -436,7 +453,7 @@ class SpectralForce(Force):
                 #do not doulbe count for calculating potential!
                 if(not maskj[i] or i < j):
                     continue
-                r = positions[j] - positions[i]
+                r = min_img_vec(positions[j], positions[i], u.trajectory.ts.dimensions, u.trajectory.periodic)
                 d = ln.norm(r)
                 temp = self.call_potential(d, self.mesh, *self.call_basis_args)
                 potential += self.w.dot(temp)
@@ -459,7 +476,7 @@ class SpectralForce(Force):
             for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
                 if(not maskj[i]):
                     continue
-                r = positions[j] - positions[i]
+                r = min_img_vec(positions[j], positions[i], u.trajectory.ts.dimensions, u.trajectory.periodic)
                 d = ln.norm(r)
                 force = self.w.dot(self.call_basis(d, self.mesh, *self.call_basis_args)) * (r / d)
                 forces[i] += force
@@ -492,7 +509,7 @@ class SpectralForce(Force):
             if(not maskj[j]):
                 continue
 
-            r = positions[j] - positions[i]
+            r = min_img_vec(positions[j], positions[i], u.trajectory.ts.dimensions, u.trajectory.periodic)
             d = ln.norm(r)
             r = r / d
             temp = self.call_basis(d, self.mesh, *self.call_basis_args)

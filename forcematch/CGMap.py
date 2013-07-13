@@ -1,7 +1,9 @@
 from MDAnalysis import Writer
 from MDAnalysis.core.AtomGroup import Universe, AtomGroup, Atom, Residue
-from MDAnalysis.coordinates.base import Timestep, Reader
+from MDAnalysis.topology.core import Bond
+import MDAnalysis.coordinates.base as base
 import numpy as np
+from ForceMatch import min_img_dist
 
 
 
@@ -56,6 +58,7 @@ class CGUniverse(Universe):
                     residues[r.id] += a
                 else:
                     residues[r.id] = Residue(r.name, r.id, [a], resnum=r.resnum)
+                a.residue = residues[r.id]
                 #add the atom
                 self.atoms += a
         
@@ -69,7 +72,6 @@ class CGUniverse(Universe):
                         reverse_map[a1] = reverse_map[a2]
                         #add the mass
                         reverse_map[a1].mass += a1.mass
-
         
         #generate matrix mappings for center of mass and sum of forces
         # A row is a mass normalized cg site defition. or unormalized 1s for forces
@@ -93,25 +95,47 @@ class CGUniverse(Universe):
         self.__trajectory = CGReader(self.ref_u.trajectory, self.top_map, self.force_map)
         for a in self.atoms:
             a.universe = self
-            
+        self.atoms._rebuild_caches()
     
     @property
     def trajectory(self):
         return self.__trajectory
 
-    def write_structure(filename, *args):
+    def write_structure(self, filename, *args):
         self.atoms.write(filename, *args)
 
 
-    def write_trajectory(filename):
+    def write_trajectory(self, filename):
         w = Writer(filename, self.atoms.numberOfAtoms())
         for ts in self.trajectory:
             w.write(ts)
         w.close()
 
-        
+    def add_residue_bonds(self, selection1, selection2):
+        """This function will add bonds between atoms mathcing selections and 2
+           within any residue
+        """
 
-class CGReader(Reader):
+        for r in self.atoms.residues:
+            group1 = r.selectAtoms(selection1)
+            group2 = r.selectAtoms(selection2)            
+            for a1 in group1:
+                for a2 in group2:
+                    self.bonds.add( Bond(a1, a2) )
+
+class Timestep(base.Timestep):
+    
+    def set_ref_traj(self, aatraj):
+        self.aatraj = aatraj
+        
+    @property
+    def dimensions(self):
+        return self.aatraj.ts.dimensions
+
+class CGReader(base.Reader):
+
+    _Timestep = Timestep
+    
     def __init__(self, aatraj, top_map, force_map):
         
         self.aatraj = aatraj
@@ -125,6 +149,7 @@ class CGReader(Reader):
         self.numframes = aatraj.numframes
         self.skip  = aatraj.skip
         self.ts = Timestep(self.numatoms)
+        self.ts.set_ref_traj(aatraj)
         self._read_next_timestep(ts=aatraj.ts)
         
     def close(self):
@@ -143,32 +168,59 @@ class CGReader(Reader):
     def _read_next_timestep(self, ts=None):
         if(ts is None):
             ts = self.aatraj.next()
-        self.ts._unitcell = ts._unitcell
         self.ts.frame = ts.frame        
-        self.ts._pos = self.top_map.dot( ts._pos )
-        try:
-            self.ts._velocities = self.top_map.dot( ts._velocities ) #COM motion
-        except AttributeError:
-            self.ts._velocities = np.zeros( (self.numatoms, 3) ,dtype=np.float32)
-        try:
-            self.ts._forces = self.force_map.dot( ts._forces )
-        except AttributeError:            
-            self.ts._forces = np.zeros( (self.numatoms, 3) ,dtype=np.float32)
+
+        #now, we must painstakingly and annoyingly put each cg group into the same periodic image
+        #collapse them, and then unwrap them
+        if(self.aatraj.periodic):
+
+            dim = shape(ts._pos)[0]
+            self.ts_pos = np.zeros( shape(self.top_map)[0], dim, dtype=np.float32)
+            self.ts_velocities = np.zeros( shape(self.top_map)[0], dim, dtype=np.float32)
+            self.ts_forces = np.zeros( shape(self.top_map)[0], dim, dtype=np.float32)
+            
+            centering_vector = np.zeros(dim)
+            for cgi in range(shape(self.top_map)[0]):
+                #get min image coordinate average
+                for aai in range(shape(self.top_map)[1]):
+                    mat[:,cgi] += self.top_map[cgi,aai] * min_img_dist(ts._pos[:,aai], centering_vector, ts.dimensions)
+                #make min image
+                mat[:,cgi] = min_img(mat[:,cgi], ts.dimensions)
+            #same for velocites, but we might not have them so use try/except
+            try:
+                for cgi in range(shape(self.force_map)[0]):
+                    #get min image coordinate average
+                    for aai in range(shape(self.force_map)[1]):
+                        mat[:,cgi] += self.force_map[cgi,aai] * min_img_dist(ts._velocities[:,aai], centering_vector, ts.dimensions)
+                        #make min image
+                        mat[:,cgi] = min_img(mat[:,cgi], ts.dimensions)
+            except AttributeError:
+                pass
+            #same for forces
+            try:
+                for cgi in range(shape(self.force_map)[0]):
+                    #get min image coordinate average
+                    for aai in range(shape(self.force_map)[1]):
+                        mat[:,cgi] += self.force_map[cgi,aai] * min_img_dist(ts_forces[:,aai], centering_vector, ts.dimensions)
+                        #make min image
+                        mat[:,cgi] = min_img(mat[:,cgi], ts.dimensions)
+            except AttributeError:
+                pass
+
+        else:
+            #SUPER EASY if not periodic!
+            self.ts._pos = self.top_map.dot( ts._pos )
+            try:
+                self.ts._velocities = self.top_map.dot( ts._velocities ) #COM motion
+            except AttributeError:
+                self.ts._velocities = np.zeros( (self.numatoms, 3) ,dtype=np.float32)
+            try:
+                self.ts._forces = self.force_map.dot( ts._forces )
+            except AttributeError:            
+                self.ts._forces = np.zeros( (self.numatoms, 3) ,dtype=np.float32)
 
         return self.ts
 
     def rewind(self):
         self.aatraj.rewind()
-        
-        
-
-def main(*args):
-    cg = CGUniverse(Universe(args[1], args[2]), ['name OW', 'name HW1 or name HW2'], ['O', 'H2'], collapse_hydrogens=False)
-    cg.write_structure("foo.gro", bonds="all")
-    cg.write_trajectory("foo.trr")
-    
-        
-if __name__ == '__main__': 
-    import sys
-    main(*sys.argv)
-
+            

@@ -16,7 +16,7 @@ class Force(object):
        To be used in the stochastic gradient step, a force should implement all of the methods here
     """
 
-    def _setup_update_params(self, w_dim, initial_w=-5):
+    def _setup_update_params(self, w_dim, initial_w=0):
         try:
             if(w_dim != len(initial_w)):
                 self.w = initial_w[0] * np.ones( w_dim )
@@ -66,14 +66,14 @@ class Force(object):
             self.mask1 = [True for x in range(u.atoms.numberOfAtoms())]
         else:
             self.mask1 = [False for x in range(u.atoms.numberOfAtoms())]
-            for a in u.selectAtoms(sel1):
+            for a in u.selectAtoms('type %s' % sel1):
                 self.mask1[a.number] = True
             
         if(sel2 is None):
             self.mask2 = self.mask1
         else:
             self.mask2 = [False for x in range(u.atoms.numberOfAtoms())]
-            for a in u.selectAtoms(sel2):
+            for a in u.selectAtoms('type %s' % sel2):
                 self.mask2[a.number] = True
                           
 
@@ -86,7 +86,7 @@ class Force(object):
 
     def plot(self, force_ax, potential_ax = None, true_force = None, true_potential = None):
         #make a mesh finer than the mesh used for finding paramers
-        self.plot_x = np.arange( self.mind(), self.maxd(), (self.maxd() - self.mind()) / 1000. )
+        self.plot_x = np.arange( self.mind, self.maxd, (self.maxd - self.mind) / 1000. )
         self.plot_force = np.empty( len(self.plot_x) )
 
 
@@ -95,20 +95,13 @@ class Force(object):
         
         self.force_ax = force_ax
         
-        #set the plot title
-        try:
-            title = "Force" #in case no plot_title
-            title = self.plot_name #if there is a plot_title
-            title = "%s type %s" % (title, self.type_name) #if this is specialized
-        except AttributeError:
-            pass
-        
-        force_ax.set_title(title)
+        #set the plot title        
+        force_ax.set_title(self.name)
         
         if(potential_ax is None):
             self.potential_ax = self.force_ax
         else:
-            self.potential_ax.set_title("Potential of %s" % title)
+            self.potential_ax.set_title("Potential of %s" % self.name)
 
         #call the force calculations
         self.calc_force_array(self.plot_x, self.plot_force)
@@ -158,8 +151,59 @@ class Force(object):
             else:
                 self.potential_ax.set_ylim(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*max(self.plot_potential))
 
+
+
+    def write_lammps_table(self, outfile, points=1000):
+        import os
+        """Write the current forcefield to the given outfile.
+        """
         
-                                  
+        #header
+        if(type(outfile ) == type('')):
+            outfile = open(outfile, 'w')
+        outfile.write('# %s\n\n' % self.name)
+        outfile.write('%s\n' % self.short_name)
+
+        #setup force table
+        rvals = np.arange( self.mind, self.maxd, (self.maxd - self.mind) / float(points))
+        force = np.empty( len(rvals) )
+        potential = np.empty( len(rvals) )
+
+        self.calc_force_array(rvals, force)
+        self.calc_potential_array(rvals, potential)
+
+        #header parameters
+        outfile.write("N %d R %f %f\n\n" % (len(rvals), self.mind, self.maxd))
+        for i in range(len(rvals)):
+            outfile.write("%d %f %f %f\n" % (i+1, rvals[i], force[i], potential[i]))
+            
+                      
+    
+
+    @property
+    def name(self):
+        name = "Force" #in case none
+        try:
+            name = self._long_name #if there is a plot_title
+            name = "%s type %s" % (name, self.type_name) #if this is specialized
+        except AttributeError:
+            pass
+        finally:
+            return name
+
+    @property
+    def short_name(self):
+        name = "F"
+        try:
+            name = self._short_name
+            name = "%s_%s_%s" % (name, self.sel1, self.sel2)
+            name = ''.join(name.split()) #remove whitesspace
+        except AttributeError:
+            pass
+        finally:
+            return name
+
+
     def calc_force_array(self, d, force):
         raise NotImplementedError("Must implement this function")
 
@@ -212,8 +256,8 @@ class AnalyticForce(Force):
         self.w = np.zeros( n )
         self._setup_update_params(n)        
         self.category = category.get_instance(cutoff)
-        self.plot_name = "AnalyticForce for %s" % category.__name__
-
+        self._long_name = "AnalyticForce for %s" % category.__name__
+        self._short_name = "AF_%s" % category.__name__
 
     def clone_force(self):
         copy = AnalyticForce(self.call_force, self.call_grad, len(self.w), self.category.cutoff)
@@ -222,9 +266,11 @@ class AnalyticForce(Force):
 
         return copy
 
+    @property
     def mind(self):
-        return 0
+        return 0.
 
+    @property
     def maxd(self):
         try:
             return category.cutoff
@@ -324,7 +370,8 @@ class LJForce(AnalyticForce):
         self.set_potential(LJForce.ulj)
         self.w[0] = epsilon
         self.w[1] = sigma
-        self.plot_name = "LJForce"
+        self._long_name = "LJForce"
+        self._short_name = "LJ"
         
     @staticmethod
     def lj(d, w):
@@ -337,10 +384,12 @@ class LJForce(AnalyticForce):
     @staticmethod
     def dlj(d, w):
         return np.asarray([4 * (6 * (w[1] / d) ** 7 - 12 * (w[1] / d) ** 13), 4 * w[0] * (42 * (w[1] / d) ** 6 - 156 * (w[1] / d) ** 12)])
-                                  
+
+    @property
     def mind(self):
         return w[1] * 0.5
-    
+
+    @property
     def maxd(self):
         return w[1] * 5
 
@@ -406,14 +455,18 @@ class SpectralForce(Force):
         #create weights 
         self.temp_force = np.zeros( 3 )
         self.category = category.get_instance(mesh.max())
-        self.plot_name = "SpectralForce for %s" % category.__name__
+        self._long_name = "SpectralForce for %s" % category.__name__
+        self._short_name = "SF_%s" % category.__name__
 
         #if this is an updatable force, set up stuff for it
         self._setup_update_params(len(mesh))
 
+     
+    @property
     def mind(self):
         return self.mesh.min()
 
+    @property
     def maxd(self):
         return self.mesh.max()
         
@@ -525,4 +578,5 @@ class SpectralForce(Force):
             #force +=  self.w.dot(temp) * r
             #self.temp_grad +=  np.outer(temp, r)
         return force
+
 

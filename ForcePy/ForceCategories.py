@@ -12,6 +12,14 @@ class ForceCategory(object):
     pass
 
 
+class Angle(ForceCategory):
+    pass
+
+class Dihedral(ForceCategory):
+    pass
+
+class Improper(ForceCategory):
+    pass
 
 class Pairwise(ForceCategory):
     """Pairwise force category. It handles constructing a neighbor-list at each time-step. 

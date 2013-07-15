@@ -26,6 +26,7 @@ class ForceMatch:
         self.force_match_calls = 0
         self.plot_frequency = 1
         self.plot_output = None
+        self.atom_type_map = None
     
     def _load_json(self, input_file):
         with open(input_file, 'r') as f:
@@ -356,55 +357,55 @@ class ForceMatch:
         
         for f in self.tar_forces:
             #we try a few times, because not all forces are for 2 types
-            if(f.category == Pairwise):
+            if(type(f.category) == Pairwise):
                 try:
                     string.append("pair_coeff %d %d %s %s %d\n" % (self.get_atom_type_index(f.sel1),
                                                                    self.get_atom_type_index(f.sel2),
-                                                                   filename,
-                                                                   f.get_short_name,
+                                                                   file_name,
+                                                                   f.short_name,
                                                                    f.maxd))
                 except AttributeError:
                     try:
                         string.append("pair_coeff * %d %s %s %d\n" % (self.get_atom_type_index(f.sel1),
-                                                                      filename,
-                                                                      f.get_short_name,
+                                                                      file_name,
+                                                                      f.short_name,
                                                                       f.maxd))
                     except AttributeError:
-                        string.append("pair_coeff * * %s %s %d\n" % (filename,
-                                                                     f.get_short_name,
+                        string.append("pair_coeff * * %s %s %d\n" % (file_name,
+                                                                     f.short_name,
                                                                      f.maxd))
         #bonds
         string.append("\nbond_style table linear %d\n\n" % points)
         index = 0
         for f in self.tar_forces:
             #we try a few times, because not all forces are for 2 types
-            if(f.category == Bond):
+            if(type(f.category) == Bond):
                 index += 1
                 string.append("bond_coeff %d %s %s\n" % (index,
-                                                            filename,
-                                                            f.get_short_name))
+                                                            file_name,
+                                                            f.short_name))
 
         #Angles
         string.append("\nangle_style table linear %d\n\n" % points)
         index = 0
         for f in self.tar_forces:
             #we try a few times, because not all forces are for 2 types
-            if(f.category == Angle):
+            if(type(f.category) == Angle):
                 index += 1
                 string.append("angle_coeff %d %s %s %d\n" % (index,
-                                                            filename,
-                                                            f.get_short_name))
+                                                            file_name,
+                                                            f.short_name))
 
         #Dihedrals
         string.append("\ndihedral_style table linear %d\n\n" % points)
         index = 0
         for f in self.tar_forces:
             #we try a few times, because not all forces are for 2 types
-            if(f.category == Dihedral):
+            if(type(f.category) == Dihedral):
                 index += 1
                 string.append("dihedral_coeff %d %s %s %d\n" % (index,
-                                                            filename,
-                                                            f.get_short_name))
+                                                            file_name,
+                                                            f.short_name))
 
         #Impropers
         #no table style in lammps, not sure what to do about this one
@@ -415,7 +416,7 @@ class ForceMatch:
     def get_pair_type_index(self, atom1, atom2):
         """Return the index of the pairwise force for this pair
         """
-        return self._get_cateogry_type(self, Pairwise, atom1, atom2)
+        return self._get_category_type(Pairwise, atom1, atom2)
 
     def get_atom_type_index(self, atom_type):
         """Return the atom type index for the given type string. Index starts from 1.
@@ -440,7 +441,7 @@ class ForceMatch:
     def get_bond_type_index(self, atom1, atom2):
         """Return the index of the bond force for this pair
         """
-        return self._get_cateogry_type_index(self, Bond, atom1, atom2)
+        return self._get_category_type_index(Bond, atom1, atom2)
 
 
     def _get_category_type_index(self, category, atom1, atom2):
@@ -461,7 +462,7 @@ class ForceMatch:
         type_count = {Bond:0, Angle:0, Pairwise:0, Dihedral:0, Improper:0}
         for f in self.tar_forces:
             try:
-                type_count[f.category] += 1
+                type_count[f.category.__class__] += 1
             except AttributeError:
                 pass
         return type_count

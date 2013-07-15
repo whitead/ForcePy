@@ -1,4 +1,4 @@
-from .ForceMatch import Pairwise, min_img_vec
+from .ForceMatch import Pairwise, min_img_vec, Bond, Angle, Dihedral
 from .Mesh import UniformMesh 
 from ForcePy.util import norm3
 
@@ -84,9 +84,9 @@ class Force(object):
         import re
         if(type(atom1) != type("")):
             atom1 = atom1.type
-        if(type(atom1) != type("")):
-            atom2 = atom1.type
-
+        if(type(atom2) != type("")):
+            atom2 = atom2.type
+        
         try:
             if(re.match(self.sel1, atom1) is not None and re.match(self.sel2, atom2) is not None):
                 return True
@@ -195,7 +195,12 @@ class Force(object):
         self.calc_potential_array(rvals, potential)
 
         #header parameters
-        outfile.write("N %d R %f %f\n\n" % (len(rvals), self.mind, self.maxd))
+        if(type(self.category) == Pairwise):
+            outfile.write("N %d R %f %f\n\n" % (len(rvals), self.mind, self.maxd))
+        elif(type(self.category) == Bond or type(self.category) == Angle):
+            outfile.write("N %d EQ %f\n\n" % (len(rvals), rvals[np.nonzero(force == min(force))[0][0]]))
+        elif(type(self.category) == Dihedral):
+            outfile.write("N %d RADIANS\n\n" % (len(rvals)))
         for i in range(len(rvals)):
             outfile.write("%d %f %f %f\n" % (i+1, rvals[i], force[i], potential[i]))
             
@@ -290,7 +295,7 @@ class AnalyticForce(Force):
 
     @property
     def mind(self):
-        return 0.
+        return 0.01
 
     @property
     def maxd(self):
@@ -486,11 +491,13 @@ class SpectralForce(Force):
      
     @property
     def mind(self):
-        return self.mesh.min()
+        """lots of codes get confused with the force/potential being at 0, so avoid that
+        """
+        return self.mesh.min() if self.mesh.min() > 0 else 0.01
 
     @property
     def maxd(self):
-        return self.mesh.max()
+        return self.mesh.max() - self.mesh.dx
         
     def clone_force(self):
         copy = SpectralForce(self.category.__class__, self.mesh, self.basis)

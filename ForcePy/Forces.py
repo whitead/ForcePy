@@ -75,7 +75,29 @@ class Force(object):
             self.mask2 = [False for x in range(u.atoms.numberOfAtoms())]
             for a in u.selectAtoms('type %s' % sel2):
                 self.mask2[a.number] = True
-                          
+
+    def valid_pair(self, atom1, atom2):
+        """Checks the two atoms' types to see if they match the type
+           specialization. If no type selections are set, returns true
+        """
+        #Don't use the selection class since it's a little heavy for this
+        import re
+        if(type(atom1) != type("")):
+            atom1 = atom1.type
+        if(type(atom1) != type("")):
+            atom2 = atom1.type
+
+        try:
+            if(re.match(self.sel1, atom1) is not None and re.match(self.sel2, atom2) is not None):
+                return True
+            if(re.match(self.sel2, atom1) is not None and re.match(self.sel1, atom2) is not None):
+                return True
+        except AttributeError:
+            return True
+
+        return False
+
+            
 
     def add_regularizer(self, *regularizers):
         """Add regularization to the stochastic gradient descent
@@ -161,7 +183,7 @@ class Force(object):
         #header
         if(type(outfile ) == type('')):
             outfile = open(outfile, 'w')
-        outfile.write('# %s\n\n' % self.name)
+        outfile.write('#%s\n\n' % self.name)
         outfile.write('%s\n' % self.short_name)
 
         #setup force table

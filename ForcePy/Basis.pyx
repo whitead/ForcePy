@@ -13,7 +13,7 @@ import numpy as np
 cimport numpy as np
 from ForcePy.Mesh import *
 import cython
-from libc.math cimport sqrt, pow
+from libc.math cimport sqrt, pow , floor, ceil
 
 
 
@@ -63,31 +63,30 @@ cdef class Quartic(object):
         self.basis_n = 0
         cdef int i        
 
-        if(width is None or width < mesh.dx):
-            width = mesh.dx
-        else:
-           #count neighbor non-zero bins in addition to main bin
-            #Not sure why I don't calculate this directly, but
-            #I think this snippet may be useful for adaptive mehses.
-            for i in range(1, len(mesh)):
-                if(mesh.cgetitem(i) - mesh.min() < width / 2.):
-                    self.basis_n += 1
-                else:
-                    break
+        if(width is None or width < mesh.dx * 1.5):
+            width = mesh.dx * 1.5
 
-            print self.basis_n
+        #count neighbor non-zero bins in addition to main bin
+        self.basis_n = <int> ceil(width / mesh.dx)
+        
         self.inv_width = (2. / width)
         
         
     cdef inline FTYPE_t _basis(self, FTYPE_t x, FTYPE_t left_edge):
         #Assumes we're given the left edge, instead of center, hence -1       
         x = self.inv_width * (x - left_edge) - 1
+        if(abs(x) >= 1):
+            return 0
         return (15. / 16.) * (1. - x * x)  * (1. - x * x) 
 
     cdef inline FTYPE_t _int_basis(self, FTYPE_t x, FTYPE_t left_edge):
         #Assumes we're given the left edge, instead of center, hence -1
         x = self.inv_width * (x - left_edge) - 1
-        return 3. / 16. * x**5 - 5./8 * x ** 3 + 15. / 16 * x
+        if(x < -1):
+            return 1
+        elif(x > 1):
+            return 0
+        return -1. / 16. * (x - 1)**3 * (3 * x**2 + 9 * x + 8)
         
     def force(self, FTYPE_t x, mesh):
         result = np.zeros(len(mesh), dtype=FTYPE)
@@ -105,17 +104,21 @@ cdef class Quartic(object):
         for i in range(index + 1, min(len(mesh), index + self.basis_n + 1)):
             cache[i] = self._basis(x, mesh.cgetitem(i))
         #downwards on mesh
-        for i in range(index - 1, max(0, index - self.basis_n - 1), -1):
+        for i in range(index - 1, max(-1, index - self.basis_n - 1), -1):
             cache[i] = self._basis(x, mesh.cgetitem(i))
         
 
     cpdef np.ndarray[FTYPE_t, ndim=1] potential(self, FTYPE_t x, mesh):
-        cdef int i, lm
+        cdef int i, lm, maxb
         lm = len(mesh)
+
         result = np.zeros(lm, dtype=FTYPE)
-        mesh_point = mesh.mesh_index(x)
-        for i in range(lm - 1, mesh_point, -1):
-            result[i] = (mesh.cgetitem(i + 1) - mesh.cgetitem(i))
-        result[mesh_point] = self._int_basis(x, mesh.cgetitem(mesh_point))
+        mesh_point = mesh.mesh_index(x)        
+        maxb = min(lm - 1, mesh_point + self.basis_n) # the point at which we must evaluate numerically
+
+        for i in range(lm - 1, maxb, -1):
+            result[i] = mesh.dx
+        for i in range(maxb, mesh_point - 1, -1):
+                result[i] = mesh.dx * self._int_basis(x, mesh.cgetitem(i))
         return -result
 

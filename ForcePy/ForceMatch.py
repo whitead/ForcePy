@@ -106,7 +106,9 @@ class ForceMatch:
                 try:
                     mng.resize(*mng.window.maxsize())
                 except AttributeError:
-                    pass
+                    #mac os x
+                    mng.resize(1200, 900)
+
 
 
             if(self.plot_output is None):
@@ -117,6 +119,7 @@ class ForceMatch:
             for i in range(len(self.tar_forces)):
                 self.tar_forces[i].plot(plt.subplot(plot_w, plot_h, i+1))
             plt.show()
+            plt.ioff()
                 
 
         for ts in self.u.trajectory:
@@ -190,6 +193,8 @@ class ForceMatch:
             iterations -= 1
             if(iterations == 0):
                 break
+
+        plt.show()
         if(not self.plot_output is None):
             plot_fig.tight_layout()
             plt.savefig(self.plot_output)

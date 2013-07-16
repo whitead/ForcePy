@@ -2,8 +2,8 @@ from ForcePy import *
 import numpy as np
 import matplotlib.pyplot as plt
 
-mesh = UniformMesh(0,10,1)
-finemesh = UniformMesh(0,11,0.001)
+mesh = UniformMesh(0,10,5)
+finemesh = UniformMesh(0,11,0.1)
 basis = Basis.Quartic(mesh, 1)
 
 xval = [finemesh[x] for x in range(len(finemesh))]

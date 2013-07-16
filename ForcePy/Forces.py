@@ -16,22 +16,27 @@ class Force(object):
        To be used in the stochastic gradient step, a force should implement all of the methods here
     """
 
-    def _setup_update_params(self, w_dim, initial_w=0):
+    def _setup_update_params(self, w_dim, initial_w=-5., eta=None):
+        """ Assumes a line from given initial height down to zero. Basically repulsive force
+        """
+        self.eta = eta
         try:
             if(w_dim != len(initial_w)):
-                self.w = initial_w[0] * np.ones( w_dim )
+                self.w = initial_w[0] * np.arange( w_dim - 1, -1, -1, dtype=np.float32 ) / w_dim
             else:
                 self.w = np.copy(initial_w)
-            self.eta = max(1, np.median(abs(initial_height)) * 2)
+            if(eta is None):
+                self.eta = max(1, np.median(np.abs(initial_w)) * 2)
         except TypeError:
-            self.w = initial_w * np.ones( w_dim )
-            self.eta = max(1, abs(initial_w) * 2)
+            self.w = initial_w * np.arange( w_dim - 1, -1, -1 , dtype=np.float32) / w_dim
+            if(eta is None):
+                self.eta = max(1, abs(initial_w) * 2)
 
-        self.temp_grad = np.empty( (w_dim, 3) )
-        self.temp_force = np.empty( 3 )
-        self.w_grad = np.empty( w_dim )
+        self.temp_grad = np.empty( (w_dim, 3) , dtype=np.float32)
+        self.temp_force = np.empty( 3 , dtype=np.float32)
+        self.w_grad = np.empty( w_dim, dtype=np.float32)
         self.regularization = []
-        self.lip = np.ones( np.shape(self.w) )
+        self.lip = np.ones( np.shape(self.w) , dtype=np.float32)
         self.sel1 = None
         self.sel2 = None
 
@@ -202,8 +207,9 @@ class Force(object):
         elif(type(self.category) == Dihedral):
             outfile.write("N %d RADIANS\n\n" % (len(rvals)))
         for i in range(len(rvals)):
-            outfile.write("%d %f %f %f\n" % (i+1, rvals[i], force[i], potential[i]))
-            
+            outfile.write("%d %f %f %f\n" % (i+1, rvals[i], potential[i], -force[i]))
+        #ATTENTION ATTENTION ATTENTION: This code here uses the lammps way of tabular forces, in that
+        #positive force is repulsive.
                       
     
 
@@ -272,7 +278,6 @@ class AnalyticForce(Force):
     length n (as set in the constructor).  It should return a gradient
     of length n.
     
-    This force correctly handles types.
     """
 
 
@@ -283,14 +288,13 @@ class AnalyticForce(Force):
         self.w = np.zeros( n )
         self._setup_update_params(n)        
         self.category = category.get_instance(cutoff)
+        self.cutoff = cutoff
         self._long_name = "AnalyticForce for %s" % category.__name__
         self._short_name = "AF_%s" % category.__name__
 
     def clone_force(self):
-        copy = AnalyticForce(self.call_force, self.call_grad, len(self.w), self.category.cutoff)
-        if(not self.call_potential is None):
-            copy.call_potential = self.call_potential
-
+        assert type(copy) == AnalyticForce, "Must implement clone_force method for %s" % type(copy)
+        copy = AnalyticForce(self.category.__class__, self.call_force, self.call_grad, len(self.w), self.cutoff, self.call_potential)
         return copy
 
     @property
@@ -300,14 +304,14 @@ class AnalyticForce(Force):
     @property
     def maxd(self):
         try:
-            return category.cutoff
+            return self.cutoff
         except AttributeError:
             return 10
 
 
     def calc_force_array(self, d, forces):
         for i in range(len(d)):
-            forces[i] = self.call_potential(d[i], self.w)
+            forces[i] = self.call_force(d[i], self.w)
 
     def calc_potential_array(self, d, potentials):
         if(self.call_potential is None):
@@ -393,8 +397,7 @@ class LJForce(AnalyticForce):
     """ Lennard jones pairwise analytic force. Not shifted (!)
     """
     def __init__(self, cutoff, sigma=1, epsilon=1):
-        super(LJForce, self).__init__(Pairwise, LJForce.lj, LJForce.dlj, 2, cutoff)
-        self.set_potential(LJForce.ulj)
+        super(LJForce, self).__init__(Pairwise, LJForce.lj, LJForce.dlj, 2, cutoff, LJForce.ulj)
         self.w[0] = epsilon
         self.w[1] = sigma
         self._long_name = "LJForce"
@@ -420,6 +423,28 @@ class LJForce(AnalyticForce):
     def maxd(self):
         return w[1] * 5
 
+class HarmonicForce(AnalyticForce):
+    def __init__(self, category, cutoff=None):
+        super(HarmonicForce, self).__init__(category, HarmonicForce.force, HarmonicForce.grad, 2, cutoff, HarmonicForce.potential)
+        self._setup_update_params(2, [1., self.maxd / 2.], eta=0.1)
+
+    def clone_force(self):
+        copy = HarmonicForce(self.category.__class__, self.cutoff)
+        return copy
+
+
+        
+    @staticmethod
+    def force(d, w):
+        return 2 * w[0] * (d - w[1])
+    
+    @staticmethod
+    def grad(d, w):
+        return [2 * (d - w[1]), -2 * w[0]]
+
+    @staticmethod
+    def potential(d,w):
+        return w[0] * (d - w[1]) ** 2
 
 class Regularizer:
     """grad_fxn: takes in vector returns gradient vector

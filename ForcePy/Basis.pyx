@@ -118,7 +118,7 @@ cdef class Quartic(object):
 
         for i in range(lm - 1, maxb, -1):
             result[i] = mesh.dx
-        for i in range(maxb, mesh_point - 1, -1):
-                result[i] = mesh.dx * self._int_basis(x, mesh.cgetitem(i))
+        for i in range(maxb, max(-1, mesh_point - self.basis_n - 1), -1):
+            result[i] = mesh.dx * self._int_basis(x, mesh.cgetitem(i))
         return -result
 

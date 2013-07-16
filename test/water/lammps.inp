@@ -1,0 +1,17 @@
+#Energy minimization 
+min_style cg
+
+thermo 50
+dump traj_dump all dcd 1 traj.dcd 
+minimize 1.0e-6 0.001 1000 1000
+
+
+#fix O-H bond
+#fix oh_shake all shake 0.01 3 0 b 1
+
+#NVE
+velocity all create 300.0 49032 mom yes dist gaussian
+thermo 1
+timestep 2 # 2 fs
+fix all_nve all nve
+run 100

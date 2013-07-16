@@ -108,14 +108,22 @@ class CGUniverse(Universe):
 
 
 
-    def write_lammps_scripts(self, fm, prefix='cg', folder = os.curdir, table_points=1000):
-
+    def write_lammps_scripts(self, fm, prefix='cg', folder = os.curdir, table_points=1000, lammps_input_file=None):
+        """Using the given ForceMatch object, this will create a set of input files for Lammps.
+        
+           The method will create the given folder and put all files
+           in it. Tables are generated for each type of force from the
+           ForceMatch object, a datafile derived from the current
+           timestep of this Universe object and an input script that
+           loads the force fields. The given lammps input file will be appended 
+           to the input script.
+        """
         if(not os.path.exists(folder)):
             os.mkdir(folder)
         os.chdir(folder)
  
-        #write force tables
-        force_info = fm.write_lammps_tables('%sforce_tables.table' % prefix, table_points)
+        #write force tables        
+        force_info = fm.write_lammps_tables('%s_force' % prefix, table_points)
 
         #write data file
 

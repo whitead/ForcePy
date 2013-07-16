@@ -343,12 +343,25 @@ class ForceMatch:
             tfcat._teardown_update()        
 
 
-    def write_lammps_tables(self, file_name, points=1000):
+    def write_lammps_tables(self, prefix, points=1000):
         
-        with open(file_name, 'w') as of:
-            for rf in self.tar_forces:
-                rf.write_lammps_table(of, points)
-                of.write("\n\n")
+        #table file names
+        table_names = {}
+        table_names[Pairwise] = open("%s_pair.table" % prefix, 'w')
+        table_names[Bond] = open("%s_bond.table" % prefix, 'w')
+        table_names[Angle] = open("%s_angle.table" % prefix, 'w')
+        table_names[Dihedral] = open("%s_dihedral.table" % prefix, 'w')
+        
+        #write the files, one file for each category
+        for rf in self.tar_forces:
+            of = table_names[type(rf.category)]
+            rf.write_lammps_table(of, points)
+            of.write("\n\n")
+            
+        for f in table_names:
+            table_names[f].close()
+
+            
 
         #generate a snippet of lammps code to load the table
         
@@ -361,51 +374,55 @@ class ForceMatch:
                 try:
                     string.append("pair_coeff %d %d %s %s %d\n" % (self.get_atom_type_index(f.sel1),
                                                                    self.get_atom_type_index(f.sel2),
-                                                                   file_name,
+                                                                   table_names[Pairwise].name,
                                                                    f.short_name,
                                                                    f.maxd))
                 except AttributeError:
                     try:
                         string.append("pair_coeff * %d %s %s %d\n" % (self.get_atom_type_index(f.sel1),
-                                                                      file_name,
+                                                                      table_names[Pairwise].name,
                                                                       f.short_name,
                                                                       f.maxd))
                     except AttributeError:
-                        string.append("pair_coeff * * %s %s %d\n" % (file_name,
+                        string.append("pair_coeff * * %s %s %d\n" % (table_names[Pairwise].name,
                                                                      f.short_name,
                                                                      f.maxd))
         #bonds
-        string.append("\nbond_style table linear %d\n\n" % points)
         index = 0
         for f in self.tar_forces:
             #we try a few times, because not all forces are for 2 types
             if(type(f.category) == Bond):
+                if(index == 0):
+                    string.append("\nbond_style table linear %d\n\n" % points)
                 index += 1
                 string.append("bond_coeff %d %s %s\n" % (index,
-                                                            file_name,
-                                                            f.short_name))
+                                                         table_names[Bond].name,
+                                                         f.short_name))
 
         #Angles
-        string.append("\nangle_style table linear %d\n\n" % points)
         index = 0
         for f in self.tar_forces:
             #we try a few times, because not all forces are for 2 types
             if(type(f.category) == Angle):
+                if(index == 0):
+                    string.append("\nangle_style table linear %d\n\n" % points)
                 index += 1
                 string.append("angle_coeff %d %s %s %d\n" % (index,
-                                                            file_name,
+                                                             table_names[Angle].name,
                                                             f.short_name))
 
         #Dihedrals
-        string.append("\ndihedral_style table linear %d\n\n" % points)
+
         index = 0
         for f in self.tar_forces:
             #we try a few times, because not all forces are for 2 types
             if(type(f.category) == Dihedral):
+                if(index == 0):
+                    string.append("\ndihedral_style table linear %d\n\n" % points)
                 index += 1
                 string.append("dihedral_coeff %d %s %s %d\n" % (index,
-                                                            file_name,
-                                                            f.short_name))
+                                                                table_names[Dihedral].name,
+                                                                f.short_name))
 
         #Impropers
         #no table style in lammps, not sure what to do about this one

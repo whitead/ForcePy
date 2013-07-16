@@ -83,7 +83,7 @@ if __name__ == '__main__':
             -Wunreachable-code -Werror'
         define_macros = [('DEBUG', '1')]
     else:
-        extra_compile_args = ''
+        extra_compile_args = ['-O3', '-march=native']
         define_macros = []
 
     extensions = [Extension('util', ['ForcePy/util.%s' % ("pyx" if use_cython else "c")],
@@ -93,6 +93,10 @@ if __name__ == '__main__':
                   Extension('NeighborList', ['ForcePy/NeighborList.%s' % ("pyx" if use_cython else "c")],
                             libraries = ['m'],
                             extra_compile_args=extra_compile_args),
+                  Extension('Mesh', ['ForcePy/Mesh.%s' % ("pyx" if use_cython else "c")],
+                            libraries = [],
+                            extra_compile_args=extra_compile_args),
+
                   Extension('Basis', ['ForcePy/Basis.%s' % ("pyx" if use_cython else "c")],
                             libraries = [],
                             extra_compile_args=extra_compile_args)]

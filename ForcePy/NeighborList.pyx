@@ -1,5 +1,6 @@
 # cython: profile=False
 # filename: NeighborList.pyx
+
 import pstats, cProfile
 import numpy as np
 cimport numpy as np

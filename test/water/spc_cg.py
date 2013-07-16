@@ -4,13 +4,14 @@ import numpy as np
 
 
     
-#cgu = CGUniverse(Universe("test/water/spc.tpr", "test/water/traj.trr"), ['name OW', 'name HW1 or name HW2'], ['O', 'H2'], collapse_hydrogens=False)
-cgu = CGUniverse(Universe("test/water/spc.tpr", "test/water/traj.trr"), ['all'], ['HOH'], collapse_hydrogens=False)
+cgu = CGUniverse(Universe("test/water/spc.tpr", "test/water/traj.trr"), ['name OW', 'name HW1 or name HW2'], ['O', 'H2'], collapse_hydrogens=False)
+#cgu = CGUniverse(Universe("test/water/spc.tpr", "test/water/traj.trr"), ['all'], ['HOH'], collapse_hydrogens=False)
 cgu.add_residue_bonds("name O", "name H2")
 fm = ForceMatch(cgu, "test/water/spc_cg.json")
 ff = FileForce()
-pwf = SpectralForce(Pairwise, UniformMesh(0.1,10,0.05), Basis.UnitStep)
-bwf = SpectralForce(Bond, UniformMesh(0.1,1,0.002), Basis.UnitStep)
+pwf = SpectralForce(Pairwise, UniformMesh(0.1,10,0.25), Basis.UnitStep)
+bond_mesh = UniformMesh(0,1.2,0.3)
+bwf = SpectralForce(Bond, bond_mesh, Basis.Quartic(bond_mesh, 0.5))
 
 pwf.add_regularizer(SmoothRegularizer)
 bwf.add_regularizer(SmoothRegularizer)

@@ -194,7 +194,6 @@ class ForceMatch:
             if(iterations == 0):
                 break
 
-        plt.show()
         if(not self.plot_output is None):
             plot_fig.tight_layout()
             plt.savefig(self.plot_output)

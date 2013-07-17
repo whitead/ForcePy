@@ -132,7 +132,7 @@ cdef class NeighborList(object):
         #The exclusion list at the most recent depth
         temp_list = [[] for x in range(u.atoms.numberOfAtoms())]
         #build 1,2 terms
-        for b in u.bonds:            
+        for b in u.bonds:
             self.exclusion_list[b.atom1.number].append(b.atom2.number)
             self.exclusion_list[b.atom2.number].append(b.atom1.number)
         # build 1,3 and 1,4

@@ -203,7 +203,7 @@ class Force(object):
         if(type(self.category) == Pairwise):
             outfile.write("N %d R %f %f\n\n" % (len(rvals), self.mind, self.maxd))
         elif(type(self.category) == Bond or type(self.category) == Angle):
-            outfile.write("N %d EQ %f\n\n" % (len(rvals), rvals[np.nonzero(force == min(force))[0][0]]))
+            outfile.write("N %d EQ %f\n\n" % (len(rvals), rvals[np.nonzero(potential == min(potential))[0][0]]))
         elif(type(self.category) == Dihedral):
             outfile.write("N %d RADIANS\n\n" % (len(rvals)))
         for i in range(len(rvals)):
@@ -446,6 +446,38 @@ class HarmonicForce(AnalyticForce):
     def potential(d,w):
         return w[0] * (d - w[1]) ** 2
 
+class FixedHarmonicForce(AnalyticForce):
+    """This is meant for bonds which are fixed in the trajectory.
+       The spring constant is set, but the equilibrium distance may 
+       optimized if it's not set in the constructor
+    """
+    def __init__(self, category, k, x0=None, cutoff=None):
+        super(FixedHarmonicForce, self).__init__(category, HarmonicForce.force, self.grad, 2, cutoff, HarmonicForce.potential)
+        self.k = k
+        self.x0 = x0
+        self.w[0] = k
+        if(self.x0 is not None):
+            self.w[1] = self.x0
+        
+
+    def clone_force(self):
+        copy = FixedHarmonicForce(self.category.__class__, self.k, self.x0, self.cutoff)
+        return copy    
+
+    def calc_particle_force(self, i, u):
+        #don't use actual self.k in force match,
+        #because the constant should be fixed
+        self.w[0] = 0
+        result = super(FixedHarmonicForce, self).calc_particle_force(i, u)
+        self.w[0] = self.k
+        return result
+
+        
+    def grad(self, d, w):
+        if(self.x0 is None):
+            return [0,-(d - w[1])]
+        return [0,0]
+
 class Regularizer:
     """grad_fxn: takes in vector returns gradient vector
        reg_fxn: takes in vector, returns scalar
@@ -611,7 +643,6 @@ class SpectralForce(Force):
             
             if(not maskj[j]):
                 continue
-
             r = min_img_vec(positions[j], positions[i], u.trajectory.ts.dimensions, u.trajectory.periodic)
             d = norm3(r)
             r = r / d

@@ -180,7 +180,7 @@ class Force(object):
 
 
 
-    def write_lammps_table(self, outfile, points=1000):
+    def write_lammps_table(self, outfile, force_conv=1., energy_conv=1., dist_conv=1., points=1000):
         import os
         """Write the current forcefield to the given outfile.
         """
@@ -207,7 +207,7 @@ class Force(object):
         elif(type(self.category) == Dihedral):
             outfile.write("N %d RADIANS\n\n" % (len(rvals)))
         for i in range(len(rvals)):
-            outfile.write("%d %f %f %f\n" % (i+1, rvals[i], potential[i], -force[i]))
+            outfile.write("%d %f %f %f\n" % (i+1, dist_conv * rvals[i], energy_conv * potential[i], force_conv * force[i]))
         #ATTENTION ATTENTION ATTENTION: This code here uses the lammps way of tabular forces, in that
         #positive force is repulsive.
                       

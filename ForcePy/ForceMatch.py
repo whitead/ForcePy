@@ -347,7 +347,9 @@ class ForceMatch:
             tfcat._teardown_update()        
 
 
-    def write_lammps_tables(self, prefix, points=1000):
+    def write_lammps_tables(self, prefix, force_conv=1, energy_conv=1, dist_conv=1, points=1000):
+        
+        print "conversion = %g" % force_conv
         
         #table file names
         table_names = {}
@@ -359,7 +361,7 @@ class ForceMatch:
         #write the files, one file for each category
         for rf in self.tar_forces:
             of = table_names[type(rf.category)]
-            rf.write_lammps_table(of, points)
+            rf.write_lammps_table(of, force_conv, energy_conv, dist_conv,points)
             of.write("\n\n")
             
         for f in table_names:

@@ -1,6 +1,7 @@
 from MDAnalysis import Writer
 from MDAnalysis.core.AtomGroup import Universe, AtomGroup, Atom, Residue
 from MDAnalysis.topology.core import Bond
+from MDAnalysis.core.units import get_conversion_factor
 import MDAnalysis.coordinates.base as base
 import numpy as np
 from ForceMatch import min_img_dist
@@ -127,8 +128,12 @@ class CGUniverse(Universe):
             os.mkdir(folder)
         os.chdir(folder)
  
-        #write force tables        
-        force_info = fm.write_lammps_tables('%s_force' % prefix, table_points)
+        #write force tables
+        force_info = fm.write_lammps_tables('%s_force' % prefix, 
+                                            force_conv = -get_conversion_factor('force', 'kJ/(mol*Angstrom)', 'kcal/(mol*Angstrom)'),
+                                            energy_conv = get_conversion_factor('energy', 'kJ/mol', 'kcal/mol'),
+                                            dist_conv = get_conversion_factor('length', 'Angstrom', 'Angstrom'),
+                                            points=table_points)
 
         #write data file
 

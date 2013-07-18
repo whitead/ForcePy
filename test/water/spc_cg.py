@@ -9,8 +9,8 @@ cgu = CGUniverse(Universe("test/water/spc.tpr", "test/water/traj.trr"), ['name O
 cgu.add_residue_bonds("name O", "name H2")
 fm = ForceMatch(cgu, "test/water/spc_cg.json")
 ff = FileForce()
-pair_mesh = UniformMesh(0.1,10,0.01)
-pwf = SpectralForce(Pairwise, pair_mesh, Basis.UnitStep)
+pair_mesh = UniformMesh(0.1,10,0.1)
+pwf = SpectralForce(Pairwise, pair_mesh, Basis.Quartic(pair_mesh, 0.5))
 bwf = FixedHarmonicForce(Bond, 450, cutoff=1)
 
 pwf.add_regularizer(SmoothRegularizer)

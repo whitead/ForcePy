@@ -130,9 +130,9 @@ class CGUniverse(Universe):
  
         #write force tables
         force_info = fm.write_lammps_tables('%s_force' % prefix, 
-                                            force_conv = -get_conversion_factor('force', 'kJ/(mol*Angstrom)', 'kcal/(mol*Angstrom)'),
-                                            energy_conv = get_conversion_factor('energy', 'kJ/mol', 'kcal/mol'),
-                                            dist_conv = get_conversion_factor('length', 'Angstrom', 'Angstrom'),
+                                            force_conv = -0.278,
+                                            energy_conv = 0.278,
+                                            dist_conv = 1,
                                             points=table_points)
 
         #write data file

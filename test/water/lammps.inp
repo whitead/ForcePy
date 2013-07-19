@@ -1,6 +1,11 @@
 #Energy minimization 
 min_style cg
 
+compute bdist all bond/local dist 
+compute bdist_avg all reduce ave c_bdist
+
+thermo_style custom step time temp pe ke etotal epair ebond c_bdist_avg
+
 thermo 50
 dump traj_dump all dcd 1 traj.dcd 
 minimize 1.0e-6 0.001 1000 1000

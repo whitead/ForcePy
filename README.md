@@ -22,7 +22,8 @@ Next install ForcePy
      
      cd ../../
      git clone https://github.com/whitead/ForcePy.git
-     
+     python setup.py install --user
+
 
 Implemented Features 
 ==========

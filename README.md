@@ -11,6 +11,7 @@ Install
 ===============
 
 First install the development branch of MDAnalysis
+
     mkdir ForcePy && cd ForcePy
     git clone https://code.google.com/p/mdanalysis/ mdanalysis
     git checkout develop

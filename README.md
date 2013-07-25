@@ -7,6 +7,22 @@ Dependencies
 ==========
     matplotlib, scipy, MDAnalysis, python2.7
 
+Install
+===============
+
+First install the development branch of MDAnalysis
+    mkdir ForcePy && cd ForcePy
+    git clone https://code.google.com/p/mdanalysis/ mdanalysis
+    git checkout develop
+    cd mdanalysis/package
+    python setup.py install --user
+    
+Next install ForcePy
+     
+     cd ../../
+     git clone https://github.com/whitead/ForcePy.git
+     
+
 Implemented Features 
 ==========
 * Read structure/trajectory files, forces

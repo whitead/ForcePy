@@ -14,6 +14,22 @@ Implemented Features
 * Stochastic Gradient Descent force matching
 * Neighborlist
 
+Coarse-graining a Trajectory
+==========
+    from MDAnalysis import Universe
+    from ForcePy import *
+    fine_uni = Universe("foo.tpr", "foo.trr")
+    coarse_uni =CGUniverse(fine_uni, selections=['name OW', 'name HW1 or name HW2'], 
+                          names=['O', 'H2'], 
+			  collapse_hydrogens=False)
+    corse_uni.write_structure("cg_foo.pdb")
+    corse_uni.write_structure("cg_foo.pdb", bonds='full')
+    corse_uni.write_trajectory("cg_foo.dcd")
+    
+
+
+
+    
 
 Architecture Notes
 ==================

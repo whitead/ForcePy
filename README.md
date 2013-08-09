@@ -14,6 +14,7 @@ First install the development branch of MDAnalysis
 
     mkdir ForcePy && cd ForcePy
     git clone https://code.google.com/p/mdanalysis/ mdanalysis
+    cd mdanalysis
     git checkout develop
     cd mdanalysis/package
     python setup.py install --user
@@ -21,10 +22,15 @@ First install the development branch of MDAnalysis
 Next install ForcePy
      
      cd ../../
-     git clone https://github.com/whitead/ForcePy.git
+     git clone https://github.com/whitead/ForcePy.git ForcePy
+     cd ForcePy
      python setup.py install --user
 
-Issues with numpy include
+If you see a long list of errors, check the first few. If it says it
+can't find `arrayobject.h`, then your numpy headers are not being
+found. If you're in the Voth group and using the Enthought python
+distribution, try adding this line to your `~/.profile` or
+`~/.bash_profile` file:
 
     export C_INCLUDE_PATH=/opt/local/include:/Library/Frameworks/EPD64.framework/Versions/7.2/lib/python2.7/site-packages/numpy/core/include:$C_INCLUDE_PATH
 

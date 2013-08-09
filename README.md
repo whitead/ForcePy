@@ -24,6 +24,9 @@ Next install ForcePy
      git clone https://github.com/whitead/ForcePy.git
      python setup.py install --user
 
+Issues with numpy include
+
+    export C_INCLUDE_PATH=/opt/local/include:/Library/Frameworks/EPD64.framework/Versions/7.2/lib/python2.7/site-packages/numpy/core/include:$C_INCLUDE_PATH
 
 Implemented Features 
 ==========

@@ -363,17 +363,17 @@ class CGReader(base.Reader):
             for cgi in range(np.shape(self.top_map)[0]):
                 #get min image coordinate average
                 for aai in range(np.shape(self.top_map)[1]):
-                    mat[:,cgi] += self.top_map[cgi,aai] * min_img_dist(ts._pos[:,aai], centering_vector, ts.dimensions)
+                    self.ts_pos[:,cgi] += self.top_map[cgi,aai] * min_img_dist(ts._pos[:,aai], centering_vector, ts.dimensions)
                 #make min image
-                mat[:,cgi] = min_img(mat[:,cgi], ts.dimensions)
+                self.ts_pos[:,cgi] = min_img(self.ts_pos[:,cgi], ts.dimensions)
             #same for velocites, but we might not have them so use try/except
             try:
                 for cgi in range(np.shape(self.force_map)[0]):
                     #get min image coordinate average
                     for aai in range(np.shape(self.force_map)[1]):
-                        mat[:,cgi] += self.force_map[cgi,aai] * min_img_dist(ts._velocities[:,aai], centering_vector, ts.dimensions)
+                        self.ts_velocities[:,cgi] += self.force_map[cgi,aai] * min_img_dist(ts._velocities[:,aai], centering_vector, ts.dimensions)
                         #make min image
-                        mat[:,cgi] = min_img(mat[:,cgi], ts.dimensions)
+                        self.ts_velocities[:,cgi] = min_img(self.ts_velocities[:,cgi], ts.dimensions)
             except AttributeError:
                 pass
             #same for forces
@@ -381,9 +381,9 @@ class CGReader(base.Reader):
                 for cgi in range(np.shape(self.force_map)[0]):
                     #get min image coordinate average
                     for aai in range(np.shape(self.force_map)[1]):
-                        mat[:,cgi] += self.force_map[cgi,aai] * min_img_dist(ts_forces[:,aai], centering_vector, ts.dimensions)
+                        self.ts_forces[:,cgi] += self.force_map[cgi,aai] * min_img_dist(ts_forces[:,aai], centering_vector, ts.dimensions)
                         #make min image
-                        mat[:,cgi] = min_img(mat[:,cgi], ts.dimensions)
+                        self.ts_forces[:,cgi] = min_img(self.ts_forces[:,cgi], ts.dimensions)
             except AttributeError:
                 pass
 

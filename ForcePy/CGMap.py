@@ -355,9 +355,9 @@ class CGReader(base.Reader):
         if(self.aatraj.periodic):
 
             dim = np.shape(ts._pos)[0]
-            self.ts_pos = np.zeros( np.shape(self.top_map)[0], dim, dtype=np.float32)
-            self.ts_velocities = np.zeros( np.shape(self.top_map)[0], dim, dtype=np.float32)
-            self.ts_forces = np.zeros( np.shape(self.top_map)[0], dim, dtype=np.float32)
+            self.ts_pos = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
+            self.ts_velocities = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
+            self.ts_forces = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
             
             centering_vector = np.zeros(dim)
             for cgi in range(np.shape(self.top_map)[0]):

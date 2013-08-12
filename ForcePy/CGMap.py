@@ -360,13 +360,16 @@ class CGReader(base.Reader):
             self.ts_forces = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
             
             centering_vector = np.zeros(dim, dtype=np.float32)
+            print "running..."
             for cgi in range(np.shape(self.top_map)[0]):
+                print "\r %d" % cgi,
                 #get min image coordinate average
                 for aai in range(np.shape(self.top_map)[1]):
                     self.ts_pos[cgi,:] += self.top_map[cgi,aai] * min_img_dist(ts._pos[aai,:], centering_vector, ts.dimensions)
                 #make min image
                 self.ts_pos[cgi,:] = min_img(self.ts_pos[cgi,:], ts.dimensions)
             #same for velocites, but we might not have them so use try/except
+            print "done"
             try:
                 for cgi in range(np.shape(self.force_map)[0]):
                     #get min image coordinate average

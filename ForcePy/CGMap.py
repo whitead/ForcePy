@@ -354,23 +354,23 @@ class CGReader(base.Reader):
         #collapse them, and then unwrap them
         if(self.aatraj.periodic):
 
-            dim = shape(ts._pos)[0]
-            self.ts_pos = np.zeros( shape(self.top_map)[0], dim, dtype=np.float32)
-            self.ts_velocities = np.zeros( shape(self.top_map)[0], dim, dtype=np.float32)
-            self.ts_forces = np.zeros( shape(self.top_map)[0], dim, dtype=np.float32)
+            dim = np.shape(ts._pos)[0]
+            self.ts_pos = np.zeros( np.shape(self.top_map)[0], dim, dtype=np.float32)
+            self.ts_velocities = np.zeros( np.shape(self.top_map)[0], dim, dtype=np.float32)
+            self.ts_forces = np.zeros( np.shape(self.top_map)[0], dim, dtype=np.float32)
             
             centering_vector = np.zeros(dim)
-            for cgi in range(shape(self.top_map)[0]):
+            for cgi in range(np.shape(self.top_map)[0]):
                 #get min image coordinate average
-                for aai in range(shape(self.top_map)[1]):
+                for aai in range(np.shape(self.top_map)[1]):
                     mat[:,cgi] += self.top_map[cgi,aai] * min_img_dist(ts._pos[:,aai], centering_vector, ts.dimensions)
                 #make min image
                 mat[:,cgi] = min_img(mat[:,cgi], ts.dimensions)
             #same for velocites, but we might not have them so use try/except
             try:
-                for cgi in range(shape(self.force_map)[0]):
+                for cgi in range(np.shape(self.force_map)[0]):
                     #get min image coordinate average
-                    for aai in range(shape(self.force_map)[1]):
+                    for aai in range(np.shape(self.force_map)[1]):
                         mat[:,cgi] += self.force_map[cgi,aai] * min_img_dist(ts._velocities[:,aai], centering_vector, ts.dimensions)
                         #make min image
                         mat[:,cgi] = min_img(mat[:,cgi], ts.dimensions)
@@ -378,9 +378,9 @@ class CGReader(base.Reader):
                 pass
             #same for forces
             try:
-                for cgi in range(shape(self.force_map)[0]):
+                for cgi in range(np.shape(self.force_map)[0]):
                     #get min image coordinate average
-                    for aai in range(shape(self.force_map)[1]):
+                    for aai in range(np.shape(self.force_map)[1]):
                         mat[:,cgi] += self.force_map[cgi,aai] * min_img_dist(ts_forces[:,aai], centering_vector, ts.dimensions)
                         #make min image
                         mat[:,cgi] = min_img(mat[:,cgi], ts.dimensions)

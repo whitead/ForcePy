@@ -359,7 +359,7 @@ class CGReader(base.Reader):
             self.ts_velocities = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
             self.ts_forces = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
             
-            centering_vector = np.zeros(dim)
+            centering_vector = np.zeros(dim, dtype=np.float32)
             for cgi in range(np.shape(self.top_map)[0]):
                 #get min image coordinate average
                 for aai in range(np.shape(self.top_map)[1]):

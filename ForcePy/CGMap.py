@@ -4,7 +4,7 @@ from MDAnalysis.topology.core import Bond
 from MDAnalysis.core.units import get_conversion_factor
 import MDAnalysis.coordinates.base as base
 import numpy as np
-from ForceMatch import min_img_dist
+from ForceMatch import min_img_dist, min_img
 import os
 import ForcePy.ForceCategories as ForceCategories
 

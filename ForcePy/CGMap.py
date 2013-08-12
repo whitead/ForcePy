@@ -82,18 +82,26 @@ class CGUniverse(Universe):
         self.force_map = np.zeros( (self.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) , dtype=np.float32)
 
         for a in self.ref_u.atoms:
-            self.top_map[reverse_map[a].number, a.number] = a.mass / reverse_map[a].mass
-            self.force_map[reverse_map[a].number, a.number] = 1.
+            try:
+                self.top_map[reverse_map[a].number, a.number] = a.mass / reverse_map[a].mass
+                self.force_map[reverse_map[a].number, a.number] = 1.
+            except KeyError:
+                #was not selected
+                pass
                                     
         #add bonds using the reverse map
         self.bonds = set()
         for b in self.ref_u.bonds:
-            cgatom1 = reverse_map[b.atom1]
-            cgatom2 = reverse_map[b.atom2]
-            for cbg in self.bonds:
-                if(not (cbg.atom1 in [cgatom1, cgatom2]) and not( cbg.atom2 in [cgatom1, cgatom2])):
+            try:
+                cgatom1 = reverse_map[b.atom1]
+                cgatom2 = reverse_map[b.atom2]
+                for cbg in self.bonds:
+                    if(not (cbg.atom1 in [cgatom1, cgatom2]) and not( cbg.atom2 in [cgatom1, cgatom2])):
                     #OK, no bond exists yet
-                    self.bonds.add( Bond(cgatom1, cgatom2) )
+                        self.bonds.add( Bond(cgatom1, cgatom2) )
+            except KeyError:
+                #was not in selection
+                pass
 
         self.__trajectory = CGReader(self.ref_u.trajectory, self.top_map, self.force_map)
         for a in self.atoms:

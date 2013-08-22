@@ -360,21 +360,21 @@ class CGReader(base.Reader):
             self.ts_forces = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
             
             centering_vector = np.zeros(dim, dtype=np.float32)
-            print "running..."
+
             for cgi in range(np.shape(self.top_map)[0]):
-                print "\r %d" % cgi,
                 #get min image coordinate average
                 for aai in range(np.shape(self.top_map)[1]):
-                    self.ts_pos[cgi,:] += self.top_map[cgi,aai] * min_img_dist(ts._pos[aai,:], centering_vector, ts.dimensions)
+                    if(self.top_map[cgi,aai] != 0):
+                        self.ts_pos[cgi,:] += self.top_map[cgi,aai] * min_img_dist(ts._pos[aai,:], centering_vector, ts.dimensions)
                 #make min image
                 self.ts_pos[cgi,:] = min_img(self.ts_pos[cgi,:], ts.dimensions)
             #same for velocites, but we might not have them so use try/except
-            print "done"
             try:
                 for cgi in range(np.shape(self.force_map)[0]):
                     #get min image coordinate average
                     for aai in range(np.shape(self.force_map)[1]):
-                        self.ts_velocities[cgi,:] += self.force_map[cgi,aai] * min_img_dist(ts._velocities[aai,:], centering_vector, ts.dimensions)
+                        if(self.force_map[cgi,aai] != 0):
+                            self.ts_velocities[cgi,:] += self.force_map[cgi,aai] * min_img_dist(ts._velocities[aai,:], centering_vector, ts.dimensions)
                         #make min image
                         self.ts_velocities[cgi,:] = min_img(self.ts_velocities[cgi,:], ts.dimensions)
             except AttributeError:
@@ -384,7 +384,8 @@ class CGReader(base.Reader):
                 for cgi in range(np.shape(self.force_map)[0]):
                     #get min image coordinate average
                     for aai in range(np.shape(self.force_map)[1]):
-                        self.ts_forces[cgi,:] += self.force_map[cgi,aai] * min_img_dist(ts_forces[aai,:], centering_vector, ts.dimensions)
+                        if(self.force_map[cgi,aai] != 0):
+                            self.ts_forces[cgi,:] += self.force_map[cgi,aai] * min_img_dist(ts_forces[aai,:], centering_vector, ts.dimensions)
                         #make min image
                         self.ts_forces[cgi,:] = min_img(self.ts_forces[cgi,:], ts.dimensions)
             except AttributeError:

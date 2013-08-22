@@ -148,7 +148,7 @@ class Force(object):
         #plot force and save reference to line
         self.force_line, = force_ax.plot(self.plot_x, self.plot_force, color="blue")
 
-        force_ax.set_ylim(1.1*min(min(self.plot_force), -max(self.plot_force)), 1.1*max(self.plot_force))
+        force_ax.set_ylim(-1.1*min(-min(self.plot_force), max(self.plot_force)), 1.1*max(self.plot_force))
 
         #plot potential if possible
         try:
@@ -156,7 +156,7 @@ class Force(object):
             self.calc_potential_array(self.plot_x, self.plot_potential)
             self.potential_line, = self.potential_ax.plot(self.plot_x, self.plot_potential, color="red")
             if(self.force_ax == self.potential_ax):
-                self.potential_ax.set_ylim(min(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*min(min(self.plot_force), -max(self.plot_force))), max(1.1*max(self.plot_force), 1.1*max(self.plot_potential)))
+                self.potential_ax.set_ylim(min(1.1*min(min(self.plot_potential), -max(self.plot_potential)), -1.1*min(-min(self.plot_force), max(self.plot_force))), max(1.1*max(self.plot_force), 1.1*max(self.plot_potential)))
             else:
                 self.potential_ax.set_ylim(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*max(self.plot_potential))
         except NotImplementedError:
@@ -167,14 +167,14 @@ class Force(object):
         #call the force calculations
         self.calc_force_array(self.plot_x, self.plot_force)
         self.force_line.set_ydata(self.plot_force)
-        self.force_ax.set_ylim(1.1*min(min(self.plot_force), -max(self.plot_force)), 1.1*max(self.plot_force))
+        self.force_ax.set_ylim(-1.1*min(-min(self.plot_force), max(self.plot_force)), 1.1*max(self.plot_force))
 
         #plot potential if possible
         if(not (self.plot_potential is None)):
             self.calc_potential_array(self.plot_x, self.plot_potential)
             self.potential_line.set_ydata(self.plot_potential)
             if(self.force_ax == self.potential_ax):
-                self.potential_ax.set_ylim(min(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*min(min(self.plot_force), -max(self.plot_force))), max(1.1*max(self.plot_force), 1.1*max(self.plot_potential)))
+                self.potential_ax.set_ylim(min(1.1*min(min(self.plot_potential), -max(self.plot_potential)), -1.1*min(-min(self.plot_force), max(self.plot_force))), max(1.1*max(self.plot_force), 1.1*max(self.plot_potential)))
             else:
                 self.potential_ax.set_ylim(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*max(self.plot_potential))
 

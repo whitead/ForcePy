@@ -265,9 +265,27 @@ class FileForce(Force):
         forces[:] = u.trajectory.ts._forces
 
     def clone_force(self):
-        copy = FileForce()
+        return FileForce()
 
 
+class LammpsForce(Force):
+    """Reads forces from a lammps force output
+    """
+    def LammpsForce(self, file_name):
+        self.file = open(file_name, 'r')
+
+    def calc_forces(self, forces, u):
+        while(not self.file.readline().startswith('ITEM: ATOMS')):
+            pass
+        for i in range(len(forces)):
+            sline = self.file.readline().split()
+            try:
+                forces[int(sline[0]),:] = [float(x) for x in sline[1:]]
+            except ValueError:
+                print "Invalid forces line at %s" % reduce(lambda x,y: x + y, sline)
+            
+    def clone_force(self):
+          return LammpsForce(self.file.name)
 
 class AnalyticForce(Force):
     """ A pairwise analtric force that takes in a function for

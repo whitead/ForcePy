@@ -46,6 +46,9 @@ class CGUniverse(Universe):
 
         self._build_structure()
         
+        print("Topology mapping by center of mass, forces by sum")
+        print("This is %s a periodic trajectory" % ("" if self.trajectory.periodic else "not"))
+        
 
     def _build_structure(self):
         index = 0

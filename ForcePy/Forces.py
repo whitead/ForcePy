@@ -269,10 +269,10 @@ class FileForce(Force):
         return FileForce()
 
 
-class LammpsForce(Force):
+class LammpsFileForce(Force):
     """Reads forces from a lammps force output
     """
-    def LammpsForce(self, file_name):
+    def LammpsFileForce(self, file_name):
         self.file = open(file_name, 'r')
 
     def calc_forces(self, forces, u):
@@ -281,12 +281,12 @@ class LammpsForce(Force):
         for i in range(len(forces)):
             sline = self.file.readline().split()
             try:
-                forces[int(sline[0]),:] = [float(x) for x in sline[1:]]
+                forces[int(sline[0]),:] = [-float(x) for x in sline[1:]]
             except ValueError:
                 print "Invalid forces line at %s" % reduce(lambda x,y: x + y, sline)
             
     def clone_force(self):
-          return LammpsForce(self.file.name)
+          return LammpsFileForce(self.file.name)
 
 class AnalyticForce(Force):
     """ A pairwise analtric force that takes in a function for

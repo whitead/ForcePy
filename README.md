@@ -1,7 +1,10 @@
 ForcePy
 =======
 
-Force matching code.
+Force matching code. Supports input from Gromacs and Lammps. Not
+tested for input NAMD simulations. Outputs Lammps tabular potentials
+and input files. Also can be used for topology reduction in
+coarse-graining.
 
 Dependencies
 ==========
@@ -12,7 +15,6 @@ Install
 
 First install the development branch of MDAnalysis
 
-    mkdir ForcePy && cd ForcePy
     git clone https://code.google.com/p/mdanalysis/ mdanalysis
     cd mdanalysis
     git checkout develop
@@ -36,7 +38,7 @@ distribution, try adding this line to your `~/.profile` or
 
 Coarse-graining a Trajectory
 ==========
-The ForcePy module can be used to coarse-grain a trajectory.
+The ForcePy module can be used to coarse-grained a trajectory.
 
 The first step is to import the necessary libraries:
 
@@ -60,30 +62,47 @@ an input:
                           names=['O', 'H2'], 
 			  collapse_hydrogens=False)
 
-The `selections` variable is an array of strings. Each string is a VMD
-atom selection string. In this example water oxygen is the first
-string and water hydrogens are the second string. The next variable,
-`names`, is optional and is the names to be given to the
-selections. It is an array of strings the same length as
-`selections`. If `names` is not given, then the atoms in the resulting
-coarse-grained trajectory will have numbers as their names. The last
-variable, `collapse_hydrogens`, can be `True` or `False`. If it's
-`True`, then all hydrogens will automatically be included in
-neighboring atoms which are selected. So, for example, if you select a
-carbon, all its hydrogens will be included. Its default is `True`.
+The `selections` variable is an array of strings. Each string is a
+Charmm atom selection string. Note, these are very similar to VMD
+selection string. You may test them out using the following syntax:
+
+    selected_atoms = fine_uni.selectAtoms('name OW')
+    for a in selected_atoms:
+        print a
+
+ In this example water oxygen is the first string and water hydrogens
+are the second string. The next variable, `names`, is optional and is
+the array of names to be given to the selections. It is an array of
+strings the same length as `selections`. If `names` is not given, then
+the atoms in the resulting coarse-grained trajectory will have numbers
+as their names. The last variable, `collapse_hydrogens`, can be `True`
+or `False`. If it's `True`, then all hydrogens will automatically be
+included in neighboring atoms which are selected. So, for example, if
+you select a carbon, all its hydrogens will be included. Its default
+is `True`.
 
 Now that you have a coarse-grained trajectory, you may write out the
 structure or trajectory using the following syntax:
 
-    corse_uni.write_structure("cg_foo.pdb")
-    corse_uni.write_structure("cg_foo.pdb", bonds='full')
-    corse_uni.write_trajectory("cg_foo.dcd")
+    coarse_uni.write_structure("cg_foo.pdb")
+    coarse_uni.write_structure("cg_foo.pdb", bonds='full')
+    coarse_uni.write_trajectory("cg_foo.dcd")
     
 
 The coarse-grained trajectory is also a valid MDAnalysis object and
 you may perform any analysis techniques on it from the
 [MDAnalysis](https://code.google.com/p/mdanalysis/) package.
     
+Adding Bonds
+--------------------
+
+Bonding information isn't always included in pdb files. To add a bond
+manually, use this line of code:
+
+    coarse_uni.add_residue_bonds('name O', 'name H2')    
+
+This will bond all atoms named `O` with all atoms named `H2` *within
+each residue*.
 
 Architecture Notes
 ==================
@@ -98,8 +117,14 @@ points to a `ForceCategory` that contains useful
 methods/variables. For example, the `PairwiseCategory` contains a
 neighborlist implementation.
 
+Regularizers may be added to force objects as well by calling the
+`add_regularizer` method.
+
 The `PairwiseSpectralForce` is a linear combination of basis
-functions. 
+functions. This is usually a good choice. The `PairwiseSpectralForce`
+requires a mesh and basis function. Currently only `UniformMesh` is
+implemented. For the basis functions, `UnitStep` and `Quartic` is
+implemented.
 
 A given `Force` may be 'specialized' to work on only a certain type or
 type pair. This may be done by calling `specialize_type` before it is
@@ -124,21 +149,11 @@ algorithm will try to minimize the observable. The observable under
 the new forcefied will be sum_i O_i * exp(-(U' - U) * beta), where U'
 is the new potential. The gradient at each frame will be -beta * U' *
 exp(-(U' - U) * beta). The meshes implment integrated forms for
-working with potentials. This gradient, by the way, isn't correct
-since the derivative of the normalization constant changes. It reamins
-to be shown that this gradient is an unbiased estimator. You should do
-that.
+working with potentials. This gradient, by the way, depends on the
+current potential correct since the derivative of the normalization
+constant changes.
 
-We now need the U' derivative wrt to weights. It's the integrated
-basis function. Except, there is a problem that we're working per
-particle. You'll need to work on the math for that one. I'm guessing
-that I can sub in the average energy per particle. No, that won't work
-due the exponential. For the now the only idea I've got is to
-calculate total energy at each frame. 
-
-What needs to be done for this section: Figure out how to calculate
-the potentials given the forces. DONE. Now what needs to be done: Figure
-out how to integrate over the potentials. Should be done by adding
+More to come in this section
 
 
 Meshes
@@ -148,16 +163,18 @@ Meshes
 Basis functions
 =============
 *unit step
+*Quartic
 
 Forces
 =========
-*Spectral 
+* FileForce
+* LammpsFileForce
+* SpectralPairwiseForce
+* AnalyticForce
+* LJForce
+* FixedHarmonicForce
 
-
-TODO
+Regularizers
 ==========
-* Bonds, Angles etc.
-* Make TopoForceCategory. Why? No.
-* Parallelize
-* Think about analytical forms
-* 
+* SmoothRegularizer
+* L2Regularizer

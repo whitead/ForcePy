@@ -26,7 +26,7 @@ class CGUniverse(Universe):
         atoms in that selection will be one bead in the CG system.
     """
 
-    def __init__(self, otherUniverse, selections, names = None, collapse_hydrogens = True):
+    def __init__(self, otherUniverse, selections, names = None, collapse_hydrogens = True, lammps_force_dump = None):
         if(names is None):
             names = [ "%d" % x for x in range(0, len(selections))]
         if(len(names) != len(selections)):
@@ -37,6 +37,13 @@ class CGUniverse(Universe):
         self.names = names
         self.chydrogens = collapse_hydrogens
         self.universe = self
+
+        if(lammps_force_dump):
+            self.lfdump = open(lammps_force_dump, 'r')
+        else:
+            self.lfdump = None
+
+
         self._build_structure()
         
 
@@ -103,7 +110,7 @@ class CGUniverse(Universe):
                 #was not in selection
                 pass
 
-        self.__trajectory = CGReader(self.ref_u.trajectory, self.top_map, self.force_map)
+        self.__trajectory = CGReader(self.ref_u.trajectory, self.top_map, self.force_map, self.lfdump)
         for a in self.atoms:
             a.universe = self
         self.atoms._rebuild_caches()
@@ -315,12 +322,14 @@ class CGReader(base.Reader):
 
     _Timestep = Timestep
     
-    def __init__(self, aatraj, top_map, force_map):
+    def __init__(self, aatraj, top_map, force_map, lfdump):
         
         self.aatraj = aatraj
 
         self.top_map = top_map
         self.force_map = force_map
+        
+        self.lfdump = lfdump
 
         self.units = aatraj.units
         self.numatoms = np.shape( top_map )[0] #The topology matrix mapping should have a number of rows equal to cg atoms
@@ -354,7 +363,7 @@ class CGReader(base.Reader):
         #collapse them, and then unwrap them
         if(self.aatraj.periodic):
 
-            dim = np.shape(ts._pos)[0]
+            dim = np.shape(ts._pos)[1]
             self.ts_pos = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
             self.ts_velocities = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
             self.ts_forces = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
@@ -376,7 +385,7 @@ class CGReader(base.Reader):
                         if(self.force_map[cgi,aai] != 0):
                             self.ts_velocities[cgi,:] += self.force_map[cgi,aai] * min_img_dist(ts._velocities[aai,:], centering_vector, ts.dimensions)
                         #make min image
-                        self.ts_velocities[cgi,:] = min_img(self.ts_velocities[cgi,:], ts.dimensions)
+                    self.ts_velocities[cgi,:] = min_img(self.ts_velocities[cgi,:], ts.dimensions)
             except AttributeError:
                 pass
             #same for forces
@@ -385,10 +394,30 @@ class CGReader(base.Reader):
                     #get min image coordinate average
                     for aai in range(np.shape(self.force_map)[1]):
                         if(self.force_map[cgi,aai] != 0):
-                            self.ts_forces[cgi,:] += self.force_map[cgi,aai] * min_img_dist(ts_forces[aai,:], centering_vector, ts.dimensions)
+                            self.ts_forces[cgi,:] += self.force_map[cgi,aai] * min_img_dist(ts._forces[aai,:], centering_vector, ts.dimensions)
+                        #make min image
+                    self.ts_forces[cgi,:] = min_img(self.ts_forces[cgi,:], ts.dimensions)
+            except AttributeError:
+                #check to see if we have a lammps force dump instead
+                if(self.lfdump):
+                    forces = np.zeros( (np.shape(self.top_map)[1], dim), dtype=np.float32)
+                    while(not self.lfdump.readline().startswith('ITEM: ATOMS')):
+                        pass
+                    for i in range(len(forces)):
+                        sline = self.lfdump.readline().split()
+                        try:
+                            forces[int(sline[0]) - 1,:] = [float(x) for x in sline[1:]]
+                        except ValueError:
+                            print "Invalid forces line at %s" % reduce(lambda x,y: x + " " + y, sline)
+                    for cgi in range(np.shape(self.force_map)[0]):
+                        #get min image coordinate average
+                        for aai in range(np.shape(self.force_map)[1]):
+                            if(self.force_map[cgi,aai] != 0):
+                                self.ts_forces[cgi,:] += self.force_map[cgi,aai] * min_img_dist(forces[aai,:], centering_vector, ts.dimensions)
                         #make min image
                         self.ts_forces[cgi,:] = min_img(self.ts_forces[cgi,:], ts.dimensions)
-            except AttributeError:
+
+                    
                 pass
 
         else:

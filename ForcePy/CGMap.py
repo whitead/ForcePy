@@ -4,7 +4,7 @@ from MDAnalysis.topology.core import Bond
 from MDAnalysis.core.units import get_conversion_factor
 import MDAnalysis.coordinates.base as base
 import numpy as np
-from ForceMatch import min_img_dist, min_img
+from ForceMatch import min_img_dist, min_img, min_img_vec
 import os
 import ForcePy.ForceCategories as ForceCategories
 
@@ -320,8 +320,6 @@ class Timestep(base.Timestep):
 
 class CGReader(base.Reader):
 
-    _Timestep = Timestep
-    
     def __init__(self, aatraj, top_map, force_map, lfdump):
         
         self.aatraj = aatraj
@@ -339,6 +337,9 @@ class CGReader(base.Reader):
         self.ts = Timestep(self.numatoms)
         self.ts.set_ref_traj(aatraj)
         self.ts.dimensions = aatraj.ts.dimensions
+        self.ts._pos = None
+        self.ts._velocities = None
+        self.ts._forces = None
         self._read_next_timestep(ts=aatraj.ts)
         
     def close(self):
@@ -364,17 +365,29 @@ class CGReader(base.Reader):
         if(self.aatraj.periodic):
 
             dim = np.shape(ts._pos)[1]
-            self.ts._pos = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
-            self.ts._velocities = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
-            self.ts._forces = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
-            
+
+            if(self.ts._pos is not None):
+               self.ts._pos.fill(0) 
+            else:
+                self.ts._pos = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
+
+            if(self.ts._velocities is not None):
+               self.ts._velocities.fill(0) 
+            else:
+                self.ts._velocities = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
+
+            if(self.ts._forces is not None):
+               self.ts._forces.fill(0) 
+            else:
+                self.ts._forces = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
+                            
             centering_vector = np.zeros(dim, dtype=np.float32)
 
             for cgi in range(np.shape(self.top_map)[0]):
-                #get min image coordinate average
+                #get min image coordinate average                
                 for aai in range(np.shape(self.top_map)[1]):
                     if(self.top_map[cgi,aai] != 0):
-                        self.ts._pos[cgi,:] += self.top_map[cgi,aai] * min_img_dist(ts._pos[aai,:], centering_vector, ts.dimensions)
+                        self.ts._pos[cgi,:] += self.top_map[cgi,aai] * min_img_vec(ts._pos[aai,:], centering_vector, ts.dimensions)
                 #make min image
                 self.ts._pos[cgi,:] = min_img(self.ts._pos[cgi,:], ts.dimensions)
             #same for velocites, but we might not have them so use try/except
@@ -383,7 +396,7 @@ class CGReader(base.Reader):
                     #get min image coordinate average
                     for aai in range(np.shape(self.force_map)[1]):
                         if(self.force_map[cgi,aai] != 0):
-                            self.ts._velocities[cgi,:] += self.force_map[cgi,aai] * min_img_dist(ts._velocities[aai,:], centering_vector, ts.dimensions)
+                            self.ts._velocities[cgi,:] += self.force_map[cgi,aai] * min_img_vec(ts._velocities[aai,:], centering_vector, ts.dimensions)
                         #make min image
                     self.ts._velocities[cgi,:] = min_img(self.ts._velocities[cgi,:], ts.dimensions)
             except AttributeError:
@@ -394,7 +407,7 @@ class CGReader(base.Reader):
                     #get min image coordinate average
                     for aai in range(np.shape(self.force_map)[1]):
                         if(self.force_map[cgi,aai] != 0):
-                            self.ts._forces[cgi,:] += self.force_map[cgi,aai] * min_img_dist(ts._forces[aai,:], centering_vector, ts.dimensions)
+                            self.ts._forces[cgi,:] += self.force_map[cgi,aai] * min_img_vec(ts._forces[aai,:], centering_vector, ts.dimensions)
                         #make min image
                     self.ts._forces[cgi,:] = min_img(self.ts._forces[cgi,:], ts.dimensions)
             except AttributeError:
@@ -413,7 +426,7 @@ class CGReader(base.Reader):
                         #get min image coordinate average
                         for aai in range(np.shape(self.force_map)[1]):
                             if(self.force_map[cgi,aai] != 0):
-                                self.ts._forces[cgi,:] += self.force_map[cgi,aai] * min_img_dist(forces[aai,:], centering_vector, ts.dimensions)
+                                self.ts._forces[cgi,:] += self.force_map[cgi,aai] * min_img_vec(forces[aai,:], centering_vector, ts.dimensions)
                         #make min image
                         self.ts._forces[cgi,:] = min_img(self.ts._forces[cgi,:], ts.dimensions)
                     

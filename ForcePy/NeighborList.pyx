@@ -53,7 +53,6 @@ cdef class NeighborList(object):
         
         #set up cell number and data
         
-        
         self.cutoff = cutoff
         self.box = <double* > malloc(3 * sizeof(double))
         self.cell_number = <int* > malloc(3 * sizeof(int))
@@ -112,6 +111,7 @@ cdef class NeighborList(object):
 
         positions = u.atoms.get_positions(copy=False)
         for i in range(u.atoms.numberOfAtoms()):
+
             icell = 0
             #fancy index and binning loop over dimensions
             for j in range(3):

@@ -120,8 +120,7 @@ class ForceMatch:
                 self.tar_forces[i].plot(plt.subplot(plot_w, plot_h, i+1))
             plt.show()
             plt.ioff()
-                
-
+ 
         for ts in self.u.trajectory:
             
             #set box if necessary
@@ -334,7 +333,7 @@ class ForceMatch:
 
         
             
-    def _setup(self):
+    def _setup(self):        
         for rfcat in self.ref_cats:
             rfcat._setup(self.u)
         for tfcat in self.tar_cats:

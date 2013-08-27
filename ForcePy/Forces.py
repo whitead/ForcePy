@@ -264,6 +264,7 @@ class FileForce(Force):
     def calc_forces(self, forces, u):
         forces[:] = u.trajectory.ts._forces
 
+
     def clone_force(self):
         return FileForce()
 

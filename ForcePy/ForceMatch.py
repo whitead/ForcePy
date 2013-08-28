@@ -36,13 +36,16 @@ class ForceMatch:
         if("observable" in self.json):
             self.do_obs = True
             self.obs = [0 for x in range(self.u.trajectory.numframes)]
+            self.obs_energy = [0 for x in range(self.u.trajectory.numframes)]
             with open(self.json["observable"], 'r') as f:
                 lines = f.readlines()
                 if(len(lines) < len(self.obs)):
                     raise IOError("Number of the frames (%d) does not match number of lines in observation file (%d)" %
                                   (len(self.obs), len(lines)))
                 for i, line in zip(range(len(self.obs)), lines[:len(self.obs)]):
-                    self.obs[i] = float(line.split()[0])
+                    self.obs_energy[i] = float(line.split()[0])
+                    self.obs[i] = float(line.split()[1])
+
             if("observable_set" in self.json):
                 self.obs = np.apply_along_axis(lambda x:(x - self.json["observable_set"]) ** 2, 0, self.obs)
                 print "setting observable to %g" % self.json["observable_set"]
@@ -135,7 +138,7 @@ class ForceMatch:
             for rf in self.ref_forces:
                 rf.calc_forces(ref_forces, self.u)            
 
-            #make plots
+                #make plots
                 if(self.plot_frequency != -1 and iterations % self.plot_frequency == 0):
                     for f in self.tar_forces:
                         f.update_plot()
@@ -259,7 +262,7 @@ class ForceMatch:
                     dev_energy -= f.calc_potentials(self.u)
                         
                 for f in self.ref_forces:
-                    dev_energy += f.calc_potentials(self.u)
+                    dev_energy += self.obs_energy[index]
 
                     
                 if(abs(dev_energy /self.kt) > 250):

@@ -4,6 +4,7 @@ from MDAnalysis.topology.core import Bond
 from MDAnalysis.core.units import get_conversion_factor
 import MDAnalysis.coordinates.base as base
 import numpy as np
+import scipy.sparse as npsp
 from ForceMatch import min_img_dist, min_img, min_img_vec
 import os
 import ForcePy.ForceCategories as ForceCategories
@@ -88,8 +89,9 @@ class CGUniverse(Universe):
         
         #generate matrix mappings for center of mass and sum of forces
         # A row is a mass normalized cg site defition. or unormalized 1s for forces
-        self.top_map = np.zeros( (self.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) , dtype=np.float32)
-        self.force_map = np.zeros( (self.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) , dtype=np.float32)
+
+        self.top_map = npsp.lil_matrix( (self.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) , dtype=np.float32)
+        self.force_map = npsp.lil_matrix( (self.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) , dtype=np.float32)
 
         for a in self.ref_u.atoms:
             try:
@@ -98,6 +100,10 @@ class CGUniverse(Universe):
             except KeyError:
                 #was not selected
                 pass
+        
+        #Put them into efficient sparse matrix. Should probably test this more
+        self.top_map = self.top_map.tobsr()
+        self.force_map = self.force_map.tobsr()
                                     
         #add bonds using the reverse map
         self.bonds = set()
@@ -122,8 +128,8 @@ class CGUniverse(Universe):
     def trajectory(self):
         return self.__trajectory
 
-    def write_structure(self, filename, *args):
-        self.atoms.write(filename, *args)
+    def write_structure(self, filename, **args):
+        self.atoms.write(filename, **args)
 
 
 
@@ -364,88 +370,53 @@ class CGReader(base.Reader):
         self.ts.frame = ts.frame        
 
         #now, we must painstakingly and annoyingly put each cg group into the same periodic image
-        #collapse them, and then unwrap them
+        #and then collapse them
         if(self.aatraj.periodic):
 
             dim = np.shape(ts._pos)[1]
-
-            if(self.ts._pos is not None):
-               self.ts._pos.fill(0) 
-            else:
-                self.ts._pos = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
-
-            if(self.ts._velocities is not None):
-               self.ts._velocities.fill(0) 
-            else:
-                self.ts._velocities = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
-
-            if(self.ts._forces is not None):
-               self.ts._forces.fill(0) 
-            else:
-                self.ts._forces = np.zeros( (np.shape(self.top_map)[0], dim), dtype=np.float32)
-                            
             centering_vector = np.zeros(dim, dtype=np.float32)
 
-            for cgi in range(np.shape(self.top_map)[0]):
-                #get min image coordinate average                
-                for aai in range(np.shape(self.top_map)[1]):
-                    if(self.top_map[cgi,aai] != 0):
-                        self.ts._pos[cgi,:] += self.top_map[cgi,aai] * min_img_vec(ts._pos[aai,:], centering_vector, ts.dimensions)
-                #make min image
-                self.ts._pos[cgi,:] = min_img(self.ts._pos[cgi,:], ts.dimensions)
+            for aai in range(np.shape(self.top_map)[1]):
+                ts._pos[aai,:]+=  min_img_vec(ts._pos[aai,:], centering_vector, ts.dimensions)
+
             #same for velocites, but we might not have them so use try/except
             try:
-                for cgi in range(np.shape(self.force_map)[0]):
-                    #get min image coordinate average
-                    for aai in range(np.shape(self.force_map)[1]):
-                        if(self.force_map[cgi,aai] != 0):
-                            self.ts._velocities[cgi,:] += self.force_map[cgi,aai] * min_img_vec(ts._velocities[aai,:], centering_vector, ts.dimensions)
-                        #make min image
-                    self.ts._velocities[cgi,:] = min_img(self.ts._velocities[cgi,:], ts.dimensions)
+                for aai in range(np.shape(self.force_map)[1]):
+                    ts._velocities[aai,:] = min_img_vec(ts._velocities[aai,:], centering_vector, ts.dimensions)
             except AttributeError:
                 pass
             #same for forces
             try:
-                for cgi in range(np.shape(self.force_map)[0]):
-                    #get min image coordinate average
-                    for aai in range(np.shape(self.force_map)[1]):
-                        if(self.force_map[cgi,aai] != 0):
-                            self.ts._forces[cgi,:] += self.force_map[cgi,aai] * min_img_vec(ts._forces[aai,:], centering_vector, ts.dimensions)
-                        #make min image
-                    self.ts._forces[cgi,:] = min_img(self.ts._forces[cgi,:], ts.dimensions)
+                for aai in range(np.shape(self.force_map)[1]):
+                    ts._forces[aai,:] = min_img_vec(ts._forces[aai,:], centering_vector, ts.dimensions)
             except AttributeError:
                 #check to see if we have a lammps force dump instead
                 if(self.lfdump):
-                    forces = np.zeros( (np.shape(self.top_map)[1], dim), dtype=np.float32)
+                    ts._forces = np.zeros( (np.shape(self.top_map)[1], dim), dtype=np.float32)
                     while(not self.lfdump.readline().startswith('ITEM: ATOMS')):
                         pass
-                    for i in range(len(forces)):
+                    for i in range(len(ts._forces)):
                         sline = self.lfdump.readline().split()
                         #NOTE NOTE NOTE NOTE: Lammps forces seem to be negative of what I use.
                         try:
-                            forces[int(sline[0]) - 1,:] = [-float(x) for x in sline[1:]]
+                            ts._forces[int(sline[0]) - 1,:] = [-float(x) for x in sline[1:]]
                         except ValueError:
                             print "Invalid forces line at %s" % reduce(lambda x,y: x + " " + y, sline)
-                    for cgi in range(np.shape(self.force_map)[0]):
-                        #get min image coordinate average
-                        for aai in range(np.shape(self.force_map)[1]):
-                            if(self.force_map[cgi,aai] != 0):
-                                self.ts._forces[cgi,:] += self.force_map[cgi,aai] * min_img_vec(forces[aai,:], centering_vector, ts.dimensions)
-                        #make min image
-                        self.ts._forces[cgi,:] = min_img(self.ts._forces[cgi,:], ts.dimensions)
+                    for aai in range(np.shape(self.force_map)[1]):
+                        ts._forces[aai,:] = min_img_vec(ts._forces[aai,:], centering_vector, ts.dimensions)
+
                     
 
-        else:
-            #SUPER EASY if not periodic!
-            self.ts._pos = self.top_map.dot( ts._pos )
-            try:
-                self.ts._velocities = self.top_map.dot( ts._velocities ) #COM motion
-            except AttributeError:
-                self.ts._velocities = np.zeros( (self.numatoms, 3) ,dtype=np.float32)
-            try:
-                self.ts._forces = self.force_map.dot( ts._forces )
-            except AttributeError:            
-                self.ts._forces = np.zeros( (self.numatoms, 3) ,dtype=np.float32)
+                        
+        self.ts._pos = self.top_map.dot( ts._pos )
+        try:
+            self.ts._velocities = self.top_map.dot( ts._velocities ) #COM motion
+        except AttributeError:
+            self.ts._velocities = np.zeros( (self.numatoms, 3) ,dtype=np.float32)
+        try:
+            self.ts._forces = self.force_map.dot( ts._forces )
+        except AttributeError:
+            self.ts._forces = np.zeros( (self.numatoms, 3) ,dtype=np.float32)
 
         return self.ts
 

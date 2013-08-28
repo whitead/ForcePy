@@ -85,7 +85,7 @@ Now that you have a coarse-grained trajectory, you may write out the
 structure or trajectory using the following syntax:
 
     coarse_uni.write_structure("cg_foo.pdb")
-    coarse_uni.write_structure("cg_foo.pdb", bonds='full')
+    coarse_uni.write_structure("cg_foo.pdb", bonds='all')
     coarse_uni.write_trajectory("cg_foo.dcd")
     
 

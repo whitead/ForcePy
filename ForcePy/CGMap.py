@@ -47,7 +47,7 @@ class CGUniverse(Universe):
         
         print("Topology mapping by center of mass, forces by sum")
         print("This is %s a periodic trajectory" % ("" if self.trajectory.periodic else "not"))
-        
+
 
     def _build_structure(self):
         index = 0
@@ -126,27 +126,20 @@ class CGUniverse(Universe):
     def trajectory(self):
         return self.__trajectory
 
-    def write_structure(self, filename, **args):
-        self.atoms.write(filename, **args)
-
-
-    def write_trajectory(self, filename):
-        w = Writer(filename, self.atoms.numberOfAtoms())
-        for ts in self.trajectory:
-            w.write(ts)
-        w.close()
-
-    def add_residue_bonds(self, selection1, selection2):
-        """This function will add bonds between atoms mathcing selections and 2
-           within any residue
+    def cache(self, directory="cg_cache"):
+        """This precomputes the trajectory and structure so that it doesn't need to be 
+           recalculated at each timestep. Especially useful for random access.
+           Returns a Universe object corresponding to the cached trajectory
         """
 
-        for r in self.atoms.residues:
-            group1 = r.selectAtoms(selection1)
-            group2 = r.selectAtoms(selection2)            
-            for a1 in group1:
-                for a2 in group2:
-                    self.bonds.add( Bond(a1, a2) )
+        if(not os.path.exists(directory)):
+            os.mkdir(directory)
+        structure = os.path.join(directory, "cg.pdb")
+        trajectory = os.path.join(directory, "cg.trr")
+        write_structure(self, structure, bonds='all')
+        write_trajectory(self, trajectory)
+        return Universe(structure, trajectory)
+    
 
 class Timestep(base.Timestep):
     
@@ -255,6 +248,34 @@ class CGReader(base.Reader):
 
     def rewind(self):
         self.aatraj.rewind()
+
+#END CGUniverse Stuff
+
+def write_structure(universe, filename, **args):
+    """A symmetric version of the write_trajectory method
+    """
+    universe.atoms.write(filename, **args)
+
+
+def write_trajectory(universe, filename):
+    """A simplified method for writing trajectories
+    """
+    w = Writer(filename, universe.atoms.numberOfAtoms())
+    for ts in universe.trajectory:
+        w.write(ts)
+    w.close()
+
+def add_residue_bonds(universe, selection1, selection2):
+    """This function will add bonds between atoms mathcing selections and 2
+    within any residue
+    """
+
+    for r in universe.atoms.residues:
+        group1 = r.selectAtoms(selection1)
+        group2 = r.selectAtoms(selection2)            
+        for a1 in group1:
+            for a2 in group2:
+                universe.bonds.add( Bond(a1, a2) )
             
 
 def write_lammps_scripts(universe, fm, prefix='cg', folder = os.curdir, lammps_units="real", table_points=1000, lammps_input_file=None):

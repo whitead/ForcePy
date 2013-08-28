@@ -17,8 +17,6 @@ import ForcePy.ForceCategories as ForceCategories
 # atoms.
 
 
-#TODO: Rewrite this as a subclass of Universe. That would be much more elegant.
-
 class CGUniverse(Universe):
     """ Class which uses center of mass mappings to reduce the number
         of degrees of freedom in a given trajectory/structure
@@ -130,171 +128,6 @@ class CGUniverse(Universe):
 
     def write_structure(self, filename, **args):
         self.atoms.write(filename, **args)
-
-
-
-    def write_lammps_scripts(self, fm, prefix='cg', folder = os.curdir, lammps_units="real", table_points=1000, lammps_input_file=None):
-        """Using the given ForceMatch object, this will create a set of input files for Lammps.
-        
-           The method will create the given folder and put all files
-           in it. Tables are generated for each type of force from the
-           ForceMatch object, a datafile derived from the current
-           timestep of this Universe object and an input script that
-           loads the force fields. The given lammps input file will be appended 
-           to the input script.
-        """
-
-        #before we change directories, we need to get the path of the lammps input file 
-        if(lammps_input_file is not None):
-            lammps_input_file = os.path.abspath(lammps_input_file)
-
-        if(not os.path.exists(folder)):
-            os.mkdir(folder)
-        os.chdir(folder)
- 
-        #write force tables
-        force_info = fm.write_lammps_tables('%s_force' % prefix, 
-                                            force_conv = -0.278,
-                                            energy_conv = 0.278,
-                                            dist_conv = 1,
-                                            points=table_points)
-
-        #write data file
-
-                   
-        atom_section = []
-        mass_section = []
-        bond_section = []
-        type_map = {}
-        atom_types = 0
-        positions = self.atoms.get_positions()
-        has_charges = False
-        for a in self.atoms:
-            if(abs(a.charge) > 0):
-                has_charges = True
-
-
-        #determin sim type
-        type_count = fm.get_force_type_count()
-        sim_type = "atomic"
-        if(type_count[ForceCategories.Bond] > 0):
-            if(type_count[ForceCategories.Angle] > 0):
-                if(has_charges):
-                    sim_type = "full"
-                else:
-                    sim_type = "molecular"
-            else:
-                sim_type = "bond"
-        elif(has_charges):
-            sim_type = "charge"
-
-        
-        for i,a in zip(range(len(self.atoms)), self.atoms):
-            assert i == a.number, "Atom indices are jumbled. Atom %d has number %d" % (i, a.number)
-            if(sim_type == "full"):
-                atom_section.append("%d %d %d %f %f %f %f\n" % (i+1, a.resid, 
-                                                                fm.get_atom_type_index(a),
-                                                                a.charge, 
-                                                                positions[i,0],
-                                                                positions[i,1],
-                                                                positions[i,2]))                
-            elif(sim_type == "molecular" or sim_type == "bond"):
-                atom_section.append("%d %d %d %f %f %f\n" % (i+1, a.resid, 
-                                                             fm.get_atom_type_index(a),
-                                                             positions[i,0],
-                                                             positions[i,1],
-                                                             positions[i,2]))
-            elif(sim_type == "charge"):
-                atom_section.append("%d %d %f %f %f %f\n" % (i+1, fm.get_atom_type_index(a),
-                                                             a.charge,
-                                                             positions[i,0],
-                                                             positions[i,1],
-                                                             positions[i,2]))
-            elif(sim_type == "atomic"):
-                atom_section.append("%d %d %f %f %f\n" % (i+1, fm.get_atom_type_index(a),
-                                                          positions[i,0],
-                                                          positions[i,1],
-                                                          positions[i,2]))
-
-
-
-
-
-            if(not a.type in type_map):
-                type_map[a.type] = atom_types
-                atom_types += 1
-                mass_section.append("%d %f\n" % (atom_types, a.mass))
-
-
-        bindex = 1
-        for b in self.bonds:
-            btype = fm.get_bond_type_index(b.atom1, b.atom2)
-            if(btype is not None):
-                bond_section.append("%d %d %d %d\n" % (bindex, btype,
-                                                       b.atom1.number+1, b.atom2.number+1))
-                bindex += 1
-        
-        angle_section = []
-        dihedral_section = []
-        improper_section = []
-        
-        with open('%s_fm.data' % prefix, 'w') as output:
-
-            #make header
-            output.write('Generated by ForcePy.CGMap.py\n\n')
-            output.write('%d atoms\n' % len(self.atoms))
-            output.write('%d bonds\n' % (bindex - 1))
-            output.write('%d angles\n' % 0)
-            output.write('%d dihedrals\n' % 0)
-            output.write('%d impropers\n\n' % 0)
-
-            output.write("%d atom types\n" % (atom_types))
-            output.write("%d bond types\n" % type_count[ForceCategories.Bond])
-            output.write("%d angle types\n" % type_count[ForceCategories.Angle])
-            output.write("%d dihedral types\n" % type_count[ForceCategories.Dihedral])
-            output.write("%d improper types\n\n" % type_count[ForceCategories.Improper])
-
-            output.write('%f %f xlo xhi\n' % (0,self.trajectory.ts.dimensions[0]))
-            output.write('%f %f ylo yhi\n' % (0,self.trajectory.ts.dimensions[1]))
-            output.write('%f %f zlo zhi\n\n' % (0,self.trajectory.ts.dimensions[2]))
-
-            #the rest of the sections
-                
-            output.write("Masses\n\n")
-            output.write("".join(mass_section))
-            output.write("\nAtoms\n\n")
-            output.write("".join(atom_section))
-            if(type_count[ForceCategories.Bond] > 0):
-                output.write("\nBonds\n\n")
-                output.write("".join(bond_section))
-                if(type_count[ForceCategories.Angle] > 0):
-                    output.write("\nAngles\n\n")
-                    output.write("".join(angle_section))
-                    if(type_count[ForceCategories.Dihedrals] > 0):
-                        output.write("\nDihedrals\n\n")
-                        output.write("".join(dihedral_section))
-                        if(type_count[ForceCategories.Impropers] > 0):
-                            output.write("\nImpropers\n\n")
-                            output.write("".join(improper_section))
-            
-        #alright, now we prepare an input file
-        with open("%s_fm.inp" % prefix, 'w') as output:
-            output.write("#Lammps input file generated by ForcePy\n")
-            output.write("units %s\n" % lammps_units)
-            output.write("atom_style %s\n" % sim_type)
-            output.write("read_data %s_fm.data\n" % prefix)            
-            output.write(force_info)
-            output.write("\n")
-            
-            #now if an input file is given, add that
-            if(lammps_input_file is not None):
-                with open(lammps_input_file, 'r') as infile:
-                    for line in infile.readlines():
-                        output.write(line)
-
-        #now write a pdb, I've found that can come in handy
-        self.atoms.write("%s_start.pdb" % prefix, bonds="all")
-        
 
 
     def write_trajectory(self, filename):
@@ -423,3 +256,166 @@ class CGReader(base.Reader):
     def rewind(self):
         self.aatraj.rewind()
             
+
+def write_lammps_scripts(universe, fm, prefix='cg', folder = os.curdir, lammps_units="real", table_points=1000, lammps_input_file=None):
+    """Using the given ForceMatch and Universe object, this will create a set of input files for Lammps.
+    
+    The function will create the given folder and put all files
+    in it. Tables are generated for each type of force from the
+    ForceMatch object, a datafile derived from the current
+    timestep of this Universe object and an input script that
+    loads the force fields. The given lammps input file will be appended 
+    to the input script.
+    """
+
+    #before we change directories, we need to get the path of the lammps input file 
+    if(lammps_input_file is not None):
+        lammps_input_file = os.path.abspath(lammps_input_file)
+
+    if(not os.path.exists(folder)):
+        os.mkdir(folder)
+    os.chdir(folder)
+ 
+    #write force tables
+    force_info = fm.write_lammps_tables('%s_force' % prefix, 
+                                        force_conv = -0.278,
+                                        energy_conv = 0.278,
+                                        dist_conv = 1,
+                                        points=table_points)
+
+        #write data file
+
+                   
+    atom_section = []
+    mass_section = []
+    bond_section = []
+    type_map = {}
+    atom_types = 0
+    positions = universe.atoms.get_positions()
+    has_charges = False
+    for a in universe.atoms:
+        if(abs(a.charge) > 0):
+            has_charges = True
+
+
+        #determin sim type
+    type_count = fm.get_force_type_count()
+    sim_type = "atomic"
+    if(type_count[ForceCategories.Bond] > 0):
+        if(type_count[ForceCategories.Angle] > 0):
+            if(has_charges):
+                sim_type = "full"
+            else:
+                sim_type = "molecular"
+        else:
+            sim_type = "bond"
+    elif(has_charges):
+        sim_type = "charge"
+
+        
+    for i,a in zip(range(len(universe.atoms)), universe.atoms):
+        assert i == a.number, "Atom indices are jumbled. Atom %d has number %d" % (i, a.number)
+        if(sim_type == "full"):
+            atom_section.append("%d %d %d %f %f %f %f\n" % (i+1, a.resid, 
+                                                            fm.get_atom_type_index(a),
+                                                            a.charge, 
+                                                            positions[i,0],
+                                                            positions[i,1],
+                                                            positions[i,2]))                
+        elif(sim_type == "molecular" or sim_type == "bond"):
+            atom_section.append("%d %d %d %f %f %f\n" % (i+1, a.resid, 
+                                                         fm.get_atom_type_index(a),
+                                                         positions[i,0],
+                                                         positions[i,1],
+                                                         positions[i,2]))
+        elif(sim_type == "charge"):
+            atom_section.append("%d %d %f %f %f %f\n" % (i+1, fm.get_atom_type_index(a),
+                                                         a.charge,
+                                                         positions[i,0],
+                                                         positions[i,1],
+                                                         positions[i,2]))
+        elif(sim_type == "atomic"):
+            atom_section.append("%d %d %f %f %f\n" % (i+1, fm.get_atom_type_index(a),
+                                                      positions[i,0],
+                                                      positions[i,1],
+                                                      positions[i,2]))
+
+
+
+
+
+        if(not a.type in type_map):
+            type_map[a.type] = atom_types
+            atom_types += 1
+            mass_section.append("%d %f\n" % (atom_types, a.mass))
+
+
+    bindex = 1
+    for b in universe.bonds:
+        btype = fm.get_bond_type_index(b.atom1, b.atom2)
+        if(btype is not None):
+            bond_section.append("%d %d %d %d\n" % (bindex, btype,
+                                                   b.atom1.number+1, b.atom2.number+1))
+            bindex += 1
+        
+    angle_section = []
+    dihedral_section = []
+    improper_section = []
+        
+    with open('%s_fm.data' % prefix, 'w') as output:
+
+        #make header
+        output.write('Generated by ForcePy.CGMap.py\n\n')
+        output.write('%d atoms\n' % len(universe.atoms))
+        output.write('%d bonds\n' % (bindex - 1))
+        output.write('%d angles\n' % 0)
+        output.write('%d dihedrals\n' % 0)
+        output.write('%d impropers\n\n' % 0)
+
+        output.write("%d atom types\n" % (atom_types))
+        output.write("%d bond types\n" % type_count[ForceCategories.Bond])
+        output.write("%d angle types\n" % type_count[ForceCategories.Angle])
+        output.write("%d dihedral types\n" % type_count[ForceCategories.Dihedral])
+        output.write("%d improper types\n\n" % type_count[ForceCategories.Improper])
+
+        output.write('%f %f xlo xhi\n' % (0,universe.trajectory.ts.dimensions[0]))
+        output.write('%f %f ylo yhi\n' % (0,universe.trajectory.ts.dimensions[1]))
+        output.write('%f %f zlo zhi\n\n' % (0,universe.trajectory.ts.dimensions[2]))
+
+            #the rest of the sections
+                
+        output.write("Masses\n\n")
+        output.write("".join(mass_section))
+        output.write("\nAtoms\n\n")
+        output.write("".join(atom_section))
+        if(type_count[ForceCategories.Bond] > 0):
+            output.write("\nBonds\n\n")
+            output.write("".join(bond_section))
+            if(type_count[ForceCategories.Angle] > 0):
+                output.write("\nAngles\n\n")
+                output.write("".join(angle_section))
+                if(type_count[ForceCategories.Dihedrals] > 0):
+                    output.write("\nDihedrals\n\n")
+                    output.write("".join(dihedral_section))
+                    if(type_count[ForceCategories.Impropers] > 0):
+                        output.write("\nImpropers\n\n")
+                        output.write("".join(improper_section))
+            
+        #alright, now we prepare an input file
+    with open("%s_fm.inp" % prefix, 'w') as output:
+        output.write("#Lammps input file generated by ForcePy\n")
+        output.write("units %s\n" % lammps_units)
+        output.write("atom_style %s\n" % sim_type)
+        output.write("read_data %s_fm.data\n" % prefix)            
+        output.write(force_info)
+        output.write("\n")
+            
+        #now if an input file is given, add that
+        if(lammps_input_file is not None):
+            with open(lammps_input_file, 'r') as infile:
+                for line in infile.readlines():
+                    output.write(line)
+
+    #now write a pdb, I've found that can come in handy
+    universe.atoms.write("%s_start.pdb" % prefix, bonds="all")
+        

@@ -15,10 +15,9 @@ from ForcePy.Mesh import *
 import cython
 from libc.math cimport sqrt, pow , floor, ceil
 
-
-
 FTYPE = np.float32
 ctypedef np.float32_t FTYPE_t
+
 
 class UnitStep(object):
 
@@ -51,26 +50,30 @@ cdef class Quartic(object):
     #inverse of the width, needed for scaling
     cdef FTYPE_t inv_width 
 
-    def __init__(self, mesh, width = None):
+    def __init__(self, mesh = None, width = None, *pickle_args):
         """ Construct a Quartic basis.  The mesh must be given so that
             the Quartice mesh can optimize its layout on the mesh. The
             width should be from the left edge to right edge of the basis
         """
-
+ 
         #only works on uniform mesh
-        assert type(mesh) is UniformMesh, "Quartic basis only works on uniform mesh currently and not %s" % type(mesh)
+        if(mesh):
+            assert type(mesh) is UniformMesh, "Quartic basis only works on uniform mesh currently and not %s" % type(mesh)
 
-        self.basis_n = 0
-        cdef int i        
+            self.basis_n = 0
 
-        if(width is None or width < mesh.dx * 1.5):
-            width = mesh.dx * 1.5
+            if(width is None or width < mesh.dx * 1.5):
+                width = mesh.dx * 1.5
 
-        #count neighbor non-zero bins in addition to main bin
-        self.basis_n = <int> ceil(width / mesh.dx)
+            #count neighbor non-zero bins in addition to main bin
+            self.basis_n = <int> ceil(width / mesh.dx)
         
-        self.inv_width = (2. / width)
-        
+            self.inv_width = (2. / width)
+        #check for pickling
+        else:            
+            self.basis_n = pickle_args[0]
+            self.inv_width = pickle_args[1]
+
         
     cdef inline FTYPE_t _basis(self, FTYPE_t x, FTYPE_t left_edge):
         #Assumes we're given the left edge, instead of center, hence -1       
@@ -121,4 +124,8 @@ cdef class Quartic(object):
         for i in range(maxb, max(-1, mesh_point - self.basis_n - 1), -1):
             result[i] = mesh.dx * self._int_basis(x, mesh.cgetitem(i))
         return -result
+
+    def __reduce__(self):
+        return Quartic, (None, None, self.basis_n, self.inv_width)
+
 

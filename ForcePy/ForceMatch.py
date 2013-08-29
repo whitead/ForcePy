@@ -8,6 +8,7 @@ import matplotlib.mlab as mlab
 import matplotlib.pyplot as plt
 from ForcePy.util import *
 from ForcePy.ForceCategories import *
+from ForcePy.CGMap import CGUniverse
 
 
 class ForceMatch:
@@ -58,6 +59,26 @@ class ForceMatch:
         for rk in required_keys:
             if(not json.has_key(rk[0])):
                 raise IOError("Error in input file, could not find %s\n. Set using %s keyword" % (rk[1], rk[0]))
+
+    def __getstate__(self):
+        odict = self.__dict__.copy()
+        #remove universe, we don't want to serialize all that
+        del odict['u']
+        
+        if(type(self.u ) == CGUniverse):
+            raise ValueError("Cannot pickle a CGUniverse. cache() must be called on it to convert to Universe")
+        
+        #store the filename and trajectory of the universe
+        odict['structure_filename'] = self.u.filename
+        odict['trajectory_filename'] = self.u.trajectory.filename
+
+        return odict
+        
+    def __setstate__(self, dict):
+        self.__dict__.update(dict)
+        #reconstruct the universe
+        self.u = Universe(dict['structure_filename'], dict['trajectory_filename'])
+        
 
     def add_tar_force(self, *forces):
         for f in forces:
@@ -182,6 +203,54 @@ class ForceMatch:
         if(not self.plot_output is None):
             plot_fig.tight_layout()
             plt.savefig(self.plot_output)
+
+    def force_match_task(self, start, end):
+        ref_forces = np.zeros( (self.u.atoms.numberOfAtoms(), 3) )
+ 
+        for ts in self.u.trajectory[start:end]:
+            
+            #set box if necessary
+            if("box" in self.json):
+                #strange ordering due to charm
+                self.u.trajectory.ts._unitcell[0] = self.json["box"][0]
+                self.u.trajectory.ts._unitcell[2] = self.json["box"][1]
+                self.u.trajectory.ts._unitcell[5] = self.json["box"][2]
+
+            self._setup()
+
+            for rf in self.ref_forces:
+                rf.calc_forces(ref_forces, self.u)            
+
+            #track error
+            net_df = 0
+            self.force_match_calls += 1
+
+            #sample particles and run updates on them 
+            for i in range(self.u.atoms.numberOfAtoms()):
+                #calculate net forces deviation
+                df = ref_forces[i]                
+                for f in self.tar_forces:
+                    df -= f.calc_particle_force(i,self.u)
+                net_df += ln.norm(df)
+
+                #now run gradient update step on all the force types
+                for f in self.tar_forces:
+                    #setup temps for inlince C code
+                    w_length = len(f.w)
+                    grad = f.w_grad
+                    temp_grad = f.temp_grad
+                    grad = np.apply_along_axis(np.sum, 1, self.temp_grad * df)
+
+                    #apply any regularization
+                    for r in f.regularization:
+                        grad += r[0](f.w)
+                    f.lip +=  np.square(grad)
+
+                    f.w = f.w - f.eta / np.sqrt(f.lip) * grad
+
+            ref_forces.fill(0)
+            self._teardown()
+
 
 
     def observation_match(self, obs_sweeps = 25, obs_samples = None, reject_tol = None):

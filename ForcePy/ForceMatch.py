@@ -170,25 +170,25 @@ class ForceMatch:
             #sample particles and run updates on them 
             for i in random.sample(range(self.u.atoms.numberOfAtoms()),self.u.atoms.numberOfAtoms()):
                 #calculate net forces deviation
-                df = ref_forces[i]                
+                df = np.array(ref_forces[i], dtype=np.float32)
                 for f in self.tar_forces:
                     df -= f.calc_particle_force(i,self.u)
                 net_df += ln.norm(df)
 
                 #now run gradient update step on all the force types
                 for f in self.tar_forces:
-                    #setup temps for inlince C code
-                    w_length = len(f.w)
-                    grad = f.w_grad
-                    temp_grad = f.temp_grad
-                    grad = np.apply_along_axis(np.sum, 1, self.temp_grad * df)
+                    negative_grad = f.w_grad
+                    negative_grad.fill(0)
+                    np.dot(f.temp_grad, df, negative_grad)
 
                     #apply any regularization
                     for r in f.regularization:
-                        grad += r[0](f.w)
-                    f.lip +=  np.square(grad)
+                        negative_grad -= r[0](f.w)
+                    f.lip +=  np.square(negative_grad)
 
-                    f.w = f.w - f.eta / np.sqrt(f.lip) * grad
+                    #we should be taking the negative of the dot product
+                    #but its easier to put the minus sign in this expression
+                    f.w = f.w + f.eta / np.sqrt(f.lip) * negative_grad
 
             ref_forces.fill(0)
             self._teardown()
@@ -228,25 +228,25 @@ class ForceMatch:
             #sample particles and run updates on them 
             for i in range(self.u.atoms.numberOfAtoms()):
                 #calculate net forces deviation
-                df = ref_forces[i]                
+                df = np.array(ref_forces[i], dtype=np.float32)
                 for f in self.tar_forces:
                     df -= f.calc_particle_force(i,self.u)
                 net_df += ln.norm(df)
 
                 #now run gradient update step on all the force types
                 for f in self.tar_forces:
-                    #setup temps for inlince C code
-                    w_length = len(f.w)
-                    grad = f.w_grad
-                    temp_grad = f.temp_grad
-                    grad = np.apply_along_axis(np.sum, 1, self.temp_grad * df)
+                    negative_grad = f.w_grad
+                    negative_grad.fill(0)
+                    np.dot(f.temp_grad, df, negative_grad)
 
                     #apply any regularization
                     for r in f.regularization:
-                        grad += r[0](f.w)
-                    f.lip +=  np.square(grad)
+                        negative_grad -= r[0](f.w)
+                    f.lip +=  np.square(negative_grad)
 
-                    f.w = f.w - f.eta / np.sqrt(f.lip) * grad
+                    #we should be taking the negative of the dot product
+                    #but its easier to put the minus sign in this expression
+                    f.w = f.w + f.eta / np.sqrt(f.lip) * negative_grad
 
             ref_forces.fill(0)
             self._teardown()

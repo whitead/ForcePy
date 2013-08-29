@@ -43,6 +43,18 @@ cdef class UniformMesh(object):
     cpdef FTYPE_t cgetitem(self, int i):
         return i * self.__dx + self.l    
 
-    @property
-    def dx(self):
-        return self.__dx
+    property dx:
+
+        def __get__(self):
+            return self.__dx
+        def __set__(self, value):
+            self.__dx = value
+
+
+    def __reduce__(self):
+        return make_uniformmesh, (self.l, self.r, self.dx)
+
+def make_uniformmesh(*args):
+    return UniformMesh(*args)
+
+setattr(make_uniformmesh, '__module__', 'ForcePy.Mesh')

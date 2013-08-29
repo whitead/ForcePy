@@ -126,6 +126,9 @@ cdef class Quartic(object):
         return -result
 
     def __reduce__(self):
-        return Quartic, (None, None, self.basis_n, self.inv_width)
+        return make_quartic, (None, None, self.basis_n, self.inv_width)
 
+def make_quartic(*args):
+    return Quartic(*args)
 
+setattr(make_quartic, '__module__', 'ForcePy.Basis')

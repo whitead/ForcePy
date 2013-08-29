@@ -3,8 +3,6 @@ import numpy as np
 import numpy.linalg as ln
 from math import ceil
 from MDAnalysis import Universe
-from scipy import weave
-from scipy.weave import converters
 from math import *
 import matplotlib.mlab as mlab
 import matplotlib.pyplot as plt
@@ -156,28 +154,13 @@ class ForceMatch:
                     df -= f.calc_particle_force(i,self.u)
                 net_df += ln.norm(df)
 
-
-                #inline C code to accumulate gradient
-                code = """
-                       for(int i = 0; i < w_length; i++) {
-                           grad(i) = 0;
-                           for(int j = 0; j < 3; j++)
-                               grad(i) -= temp_grad(i,j) * df(j); //negative due to df being switched
-                       }
-                """
-
                 #now run gradient update step on all the force types
                 for f in self.tar_forces:
                     #setup temps for inlince C code
                     w_length = len(f.w)
                     grad = f.w_grad
                     temp_grad = f.temp_grad
-                    weave.inline(code, ['w_length', 'grad', 'df', 'temp_grad'],
-                         type_converters=converters.blitz,
-                         compiler = 'gcc')
-
-                    #the code which is being weaved:
-                    #grad = np.apply_along_axis(np.sum, 1, self.temp_grad * df)
+                    grad = np.apply_along_axis(np.sum, 1, self.temp_grad * df)
 
                     #apply any regularization
                     for r in f.regularization:

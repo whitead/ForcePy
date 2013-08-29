@@ -236,7 +236,6 @@ class Force(object):
         finally:
             return name
 
-
     def calc_force_array(self, d, force):
         raise NotImplementedError("Must implement this function")
 

@@ -183,7 +183,6 @@ cdef class NeighborList(object):
                         nlist_count += 1
                     j = self.cells[j]
 
-        print "NList Time = %g" % (time.time() - ntime)
         return nlist_count
 
     def build_nlist(self, u):        

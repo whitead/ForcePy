@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from ForcePy.util import *
 from ForcePy.ForceCategories import *
 from ForcePy.CGMap import CGUniverse
+from mpi4py import MPI
 
 
 class ForceMatch:
@@ -26,6 +27,9 @@ class ForceMatch:
         self.plot_frequency = 1
         self.plot_output = None
         self.atom_type_map = None
+        self.tar_force_buffer = None
+        self.send_buffer = None
+        self.rec_buffer = None
     
     def _load_json(self, input_file):
         with open(input_file, 'r') as f:
@@ -105,8 +109,33 @@ class ForceMatch:
             self.cache = {}
             for f in self.tar_forces:
                 self.cache[f] = np.copy(f.lip)
-                        
+                                
+    def force_match_mpi(self, batch_size = None, do_plots = False):
         
+        comm = MPI.COMM_WORLD
+        size = comm.Get_size()
+        rank = comm.Get_rank()
+
+        if(batch_size):
+            index = 0
+            if(do_plots and rank == 0):
+                self._setup_plot()
+
+            while(index * size < self.u.trajectory.numframes):
+                self._distribute_tasks(batch_size, index * batch_size)
+                self._reduce_tasks()
+                if(do_plots and rank == 0):
+                    self._plot_forces()
+                index +=1
+        else:
+            self._distribute_tasks()        
+            self._reduce_tasks()
+
+
+
+        
+        
+
     def force_match(self, iterations = 0):
         
         if(iterations == 0):
@@ -117,31 +146,8 @@ class ForceMatch:
         
         #setup plots
         if(self.plot_frequency != -1):
+            self._setup_plot()
 
-            plot_fig = plt.figure()
-
-            #try to maximize the window
-            mng = plt.get_current_fig_manager()
-            try:
-                mng.frame.Maximize(True)
-            except AttributeError:
-                try:
-                    mng.resize(*mng.window.maxsize())
-                except AttributeError:
-                    #mac os x
-                    mng.resize(1200, 900)
-
-
-
-            if(self.plot_output is None):
-                plt.ion()                        
-            #set-up plots for 16/9 screen
-            plot_w = ceil(sqrt(len(self.tar_forces)) * 4 / 3.)
-            plot_h = ceil(plot_w * 9. / 16.)
-            for i in range(len(self.tar_forces)):
-                self.tar_forces[i].plot(plt.subplot(plot_w, plot_h, i+1))
-            plt.show()
-            plt.ioff()
  
         for ts in self.u.trajectory:
             
@@ -159,9 +165,7 @@ class ForceMatch:
 
                 #make plots
                 if(self.plot_frequency != -1 and iterations % self.plot_frequency == 0):
-                    for f in self.tar_forces:
-                        f.update_plot()
-                    plt.draw()
+                    self.plot_forces()
 
             #track error
             net_df = 0
@@ -201,10 +205,9 @@ class ForceMatch:
                 break
 
         if(not self.plot_output is None):
-            plot_fig.tight_layout()
-            plt.savefig(self.plot_output)
+            self._save_plot()
 
-    def force_match_task(self, start, end):
+    def _force_match_task(self, start, end):
         ref_forces = np.zeros( (self.u.atoms.numberOfAtoms(), 3) )
  
         for ts in self.u.trajectory[start:end]:
@@ -252,7 +255,67 @@ class ForceMatch:
             self._teardown()
 
 
+    def _pack_tar_forces(self):
+        if(self.send_buffer is None):
+            count = 0
+            for f in self.tar_forces:
+                count += len(f.w)
+            self.send_buffer = np.empty((count,), dtype=np.float32)
+            
+        index = 0
+        for f in self.tar_forces:
+            self.send_buffer[index:(index + len(f.w))] = f.w[:]
+            index += len(f.w)
+        
+        return self.send_buffer
 
+    def _unpack_tar_forces(self):
+        index = 0
+        for f in self.tar_forces:
+            f.w[:] = self.rec_buffer[index:(index + len(f.w))]
+            index += len(f.w)
+
+    def _reduce_tasks(self):
+
+        self._pack_tar_forces()
+        
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+
+        #sum all of em
+        if(self.rec_buffer is None):
+            self.rec_buffer = np.copy(self.send_buffer)
+
+        comm.Reduce([self.send_buffer, MPI.FLOAT], [self.rec_buffer, MPI.FLOAT])
+        
+        #average
+        if rank == 0:
+            self.rec_buffer /= comm.Get_size()
+            
+        self.rec_buffer = comm.bcast(self.rec_buffer) #broadcast the average
+        
+        self._unpack_tar_forces()
+
+    def _distribute_tasks(self, batch_size = None, offset = 0):
+        comm = MPI.COMM_WORLD
+        size = comm.Get_size()
+        rank = comm.Get_rank()
+        span = self.u.trajectory.numframes / size
+        
+        #get remainder
+        spanr = self.u.trajectory.numframes - size * span
+
+        if(batch_size):
+            #use batch size
+            print "Rank %d, executing %d to %d" % (rank, spanr / 2 + rank * span + offset, spanr / 2 + rank * span + batch_size + offset)
+            self._force_match_task(spanr / 2 + rank * span + offset, spanr / 2 + rank * span + batch_size + offset)
+        else:
+            #distribute equally on the trajectory
+            if(rank < spanr):
+                self._force_match_task(rank * (span + 1), (rank + 1) * (span + 1))
+            else:
+                self._force_match_task(rank * span + spanr, (rank + 1) * span + spanr)
+        
     def observation_match(self, obs_sweeps = 25, obs_samples = None, reject_tol = None):
         """ Match observations
         """
@@ -365,7 +428,45 @@ class ForceMatch:
 
                 print "Obs Mean: %g, reweighted mean: %g" % (sum(self.obs) / len(self.obs) ,meanobs)
 
-            
+
+    def _setup_plot(self):
+        plot_fig = plt.figure()
+
+        #try to maximize the window
+        mng = plt.get_current_fig_manager()
+        try:
+            mng.frame.Maximize(True)
+        except AttributeError:
+            try:
+                mng.resize(*mng.window.maxsize())
+            except AttributeError:
+                #mac os x
+                mng.resize(1200, 900)
+
+
+
+        if(self.plot_output is None):
+            plt.ion()                        
+
+        #set-up plots for 16/9 screen
+        plot_w = ceil(sqrt(len(self.tar_forces)) * 4 / 3.)
+        plot_h = ceil(plot_w * 9. / 16.)
+        for i in range(len(self.tar_forces)):
+            self.tar_forces[i].plot(plt.subplot(plot_w, plot_h, i+1))
+        plt.show()
+        plt.ioff()
+        
+
+    def _plot_forces(self):
+        for f in self.tar_forces:
+            f.update_plot()
+        plt.draw()
+
+    def _save_plot(self):
+        plot_fig.tight_layout()
+        plt.savefig(self.plot_output)
+
+
 
     def add_and_type_pair(self, force):
         types = []

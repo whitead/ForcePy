@@ -13,11 +13,12 @@ import numpy as np
 cimport numpy as np
 from ForcePy.Mesh import *
 import cython
-from libc.math cimport sqrt, pow , floor, ceil
+from libc.math cimport sqrt, pow , floor, ceil, exp, erf, acos
 
 FTYPE = np.float32
 ctypedef np.float32_t FTYPE_t
 
+cdef FTYPE_t pi = 3.14159265
 
 class UnitStep(object):
 
@@ -132,3 +133,94 @@ def make_quartic(*args):
     return Quartic(*args)
 
 setattr(make_quartic, '__module__', 'ForcePy.Basis')
+
+
+cdef class Gaussian(object):
+
+    #The number of non-zero neighbor bins which must be evaluated 
+    cdef int basis_n
+    #gaussian sigma inverse
+    cdef FTYPE_t inv_sigma
+
+    def __init__(self, mesh = None, sigma = None, *pickle_args):
+        """ Construct a Guassian basis.  The mesh must be given so
+            that the Gaussian mesh can optimize its layout on the
+            mesh. 
+        """
+ 
+        #only works on uniform mesh
+        if(mesh):
+            assert type(mesh) is UniformMesh, "Gaussian basis only works on uniform mesh currently and not %s" % type(mesh)
+
+            self.basis_n = 0
+
+            if(sigma is None or sigma < mesh.dx * 1.5):
+                sigma = mesh.dx * 1.5
+
+            #count neighbor non-zero bins in addition to main bin
+            self.basis_n = <int> ceil(4 * sigma / mesh.dx)
+        
+            self.inv_sigma = (1. / sigma)
+        #check for pickling
+        else:            
+            self.basis_n = pickle_args[0]
+            self.inv_sigma = pickle_args[1]
+
+        
+    cdef inline FTYPE_t _basis(self, FTYPE_t x, FTYPE_t left_edge):
+
+        x = self.inv_sigma * (x - left_edge) - 0.5
+        if(abs(x) >= 3.5):
+            return 0
+        return 1 / sqrt(2 * pi) * exp(-0.5 * x ** 2)
+
+    cdef inline FTYPE_t _int_basis(self, FTYPE_t x, FTYPE_t left_edge):
+
+        x = self.inv_sigma * (x - left_edge) - 0.5
+        if(x < -3.5):
+            return 1
+        elif(x > 3.5):
+            return 0
+        return 1 - (0.5  + 0.5 * erf(x / sqrt(2.)))
+        
+    def force(self, FTYPE_t x, mesh):
+        result = np.zeros(len(mesh), dtype=FTYPE)
+        self.force_cache(x, result, mesh)
+        return result
+
+    cpdef force_cache(self, FTYPE_t x, np.ndarray[FTYPE_t, ndim=1] cache, mesh):
+        cache.fill(0)
+        cdef int index = mesh.mesh_index(x)
+        
+        cache[index] = self._basis(x, mesh.cgetitem(index))
+
+        cdef int i
+        #upwards on mesh
+        for i in range(index + 1, min(len(mesh), index + self.basis_n + 1)):
+            cache[i] = self._basis(x, mesh.cgetitem(i))
+        #downwards on mesh
+        for i in range(index - 1, max(-1, index - self.basis_n - 1), -1):
+            cache[i] = self._basis(x, mesh.cgetitem(i))
+        
+
+    cpdef np.ndarray[FTYPE_t, ndim=1] potential(self, FTYPE_t x, mesh):
+        cdef int i, lm, maxb
+        lm = len(mesh)
+
+        result = np.zeros(lm, dtype=FTYPE)
+        mesh_point = mesh.mesh_index(x)        
+        maxb = min(lm - 1, mesh_point + self.basis_n) # the point at which we must evaluate numerically
+
+        for i in range(lm - 1, maxb, -1):
+            result[i] = mesh.dx
+        for i in range(maxb, max(-1, mesh_point - self.basis_n - 1), -1):
+            result[i] = mesh.dx * self._int_basis(x, mesh.cgetitem(i))
+        return -result
+
+    def __reduce__(self):
+        return make_gaussian, (None, None, self.basis_n, self.inv_sigma)
+
+def make_gaussian(*args):
+    return Gaussian(*args)
+
+setattr(make_gaussian, '__module__', 'ForcePy.Basis')

@@ -165,7 +165,7 @@ class ForceMatch:
 
                 #make plots
                 if(self.plot_frequency != -1 and iterations % self.plot_frequency == 0):
-                    self.plot_forces()
+                    self._plot_forces()
 
             #track error
             net_df = 0
@@ -207,10 +207,15 @@ class ForceMatch:
         if(not self.plot_output is None):
             self._save_plot()
 
-    def _force_match_task(self, start, end):
+    def _force_match_task(self, start, end, do_print = False):
         ref_forces = np.zeros( (self.u.atoms.numberOfAtoms(), 3) )
- 
-        for ts in self.u.trajectory[start:end]:
+        
+        self.u.trajectory.rewind()
+        for i in range(start):
+            self.u.trajectory.next()
+        
+        for tsi in range(start,end):
+            ts = self.u.trajectory.ts
             
             #set box if necessary
             if("box" in self.json):
@@ -253,6 +258,14 @@ class ForceMatch:
 
             ref_forces.fill(0)
             self._teardown()
+
+            #log of the error
+            if(do_print):
+                print "log error  = %g" % (0 if net_df < 1 else log(net_df))
+
+            if(tsi != end - 1):
+                self.u.trajectory.next()
+
 
 
     def _pack_tar_forces(self):
@@ -308,13 +321,13 @@ class ForceMatch:
         if(batch_size):
             #use batch size
             print "Rank %d, executing %d to %d" % (rank, spanr / 2 + rank * span + offset, spanr / 2 + rank * span + batch_size + offset)
-            self._force_match_task(spanr / 2 + rank * span + offset, spanr / 2 + rank * span + batch_size + offset)
+            self._force_match_task(spanr / 2 + rank * span + offset, spanr / 2 + rank * span + batch_size + offset, rank == 0)
         else:
             #distribute equally on the trajectory
             if(rank < spanr):
-                self._force_match_task(rank * (span + 1), (rank + 1) * (span + 1))
+                self._force_match_task(rank * (span + 1), (rank + 1) * (span + 1), rank == 0)
             else:
-                self._force_match_task(rank * span + spanr, (rank + 1) * span + spanr)
+                self._force_match_task(rank * span + spanr, (rank + 1) * span + spanr, rank == 0)
         
     def observation_match(self, obs_sweeps = 25, obs_samples = None, reject_tol = None):
         """ Match observations

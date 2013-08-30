@@ -44,6 +44,8 @@ class UnitStep(object):
         return -result
 
 
+setattr(UnitStep, '__module__', 'ForcePy.Basis')
+
 cdef class Quartic(object):
 
     #The number of non-zero neighbor bins which must be evaluated 

@@ -1,14 +1,12 @@
 from ForcePy.ForceMatch import Pairwise, min_img_vec, Bond, Angle, Dihedral
 from ForcePy.Mesh import UniformMesh 
-from ForcePy.Util import norm3
+from ForcePy.Util import norm3, spec_force_inner_loop
 
 import numpy as np
 import random
 import numpy.linalg as ln
 from MDAnalysis import Universe
 from math import ceil,log
-from scipy import weave
-from scipy.weave import converters
 
 class Force(object):
     """Can calculate forces from a universe object.
@@ -635,6 +633,11 @@ class SpectralForce(Force):
             nlist_accum += self.category.nlist_lengths[i]
 
     def calc_particle_force(self, i, u):
+        """
+        This is the most called function, so I've tried a few approaches to improve speed.
+        The waeve was the fastest, but least portable. Now I'm using a tuned cython function
+        for the most intensive calculation which is defined in Util.pyx
+        """
 
         self.temp_force.fill(0)
         self.temp_grad.fill(0)
@@ -651,11 +654,12 @@ class SpectralForce(Force):
         positions = u.atoms.get_positions()
         nlist_accum = np.sum(self.category.nlist_lengths[:i]) if i > 0  else 0
 
-        #needed for weaving code
-        w_length = len(self.w)
-        w = self.w
-        temp_grad = self.temp_grad
-        force = self.temp_force
+#needed for weaving code:
+#        w_length = len(self.w)
+#        w = self.w
+#        temp_grad = self.temp_grad
+#        force = self.temp_force
+
         temp = np.empty( len(self.w) , dtype=np.float32)
         for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
             
@@ -665,21 +669,26 @@ class SpectralForce(Force):
             d = norm3(r)
             r = r / d
             self.basis.force_cache(d, temp, self.mesh)
-            code = """
-                   #line 255 "Forces.py"
-     
-                   for(int i = 0; i < w_length; i++) {
-                       for(int j = 0; j < 3; j++) {
-                           force(j) += w(i) * temp(i) * r(j);
-                           temp_grad(i,j) += temp(i) * r(j);
-                       }
-                    }
-                    """
-            weave.inline(code, ['w', 'w_length', 'temp', 'r', 'force', 'temp_grad'],
-                         type_converters=converters.blitz,
-                         compiler = 'gcc')
-            #force +=  self.w.dot(temp) * r
-            #self.temp_grad +=  np.outer(temp, r)
-        return force
+            #tuned cython funciton
+            spec_force_inner_loop(self.w, temp, self.temp_grad, self.temp_force, r)
+# weave code:
+#            code = """
+#                   #line 255 "Forces.py"
+#     
+#                   for(int i = 0; i < w_length; i++) {
+#                       for(int j = 0; j < 3; j++) {
+#                           force(j) += w(i) * temp(i) * r(j);
+#                           temp_grad(i,j) += temp(i) * r(j);
+#                       }
+#                    }
+#                    """
+#            weave.inline(code, ['w', 'w_length', 'temp', 'r', 'force', 'temp_grad'],
+#                         type_converters=converters.blitz,
+#                         compiler = 'gcc')
+# pure numpy code:
+#            force +=  self.w.dot(temp) * r
+#            self.temp_grad +=  np.outer(temp, r)
+
+        return self.temp_force
 
 

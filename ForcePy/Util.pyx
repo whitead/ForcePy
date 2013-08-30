@@ -47,3 +47,12 @@ def min_img_dist(np.ndarray[FTYPE_t, ndim=1] x, np.ndarray[FTYPE_t, ndim=1] y, n
 @cython.boundscheck(False) # turn off bounds-checking for entire function
 cpdef double norm3(np.ndarray[FTYPE_t, ndim=1] x):
     return sqrt(x[0] * x[0] + x[1] * x[1] + x[2] * x[2])
+
+def spec_force_inner_loop(np.ndarray[FTYPE_t, ndim=1] w, np.ndarray[FTYPE_t, ndim=1] basis_out, 
+                          np.ndarray[FTYPE_t, ndim=2] grad, np.ndarray[FTYPE_t, ndim=1] force, 
+                          np.ndarray[FTYPE_t, ndim=1] r):
+    cdef FTYPE_t value
+    for i in range(w.shape[0]):
+        for j in range(r.shape[0]):
+            force[j] = force[j] + w[i] * basis_out[i] * r[j]
+            grad[i,j] = basis_out[i] * r[j] + grad[i,j]

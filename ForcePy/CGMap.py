@@ -278,7 +278,7 @@ def add_residue_bonds(universe, selection1, selection2):
                 universe.bonds.add( Bond(a1, a2) )
             
 
-def write_lammps_scripts(universe, fm, prefix='cg', folder = os.curdir, lammps_units="real", table_points=1000, lammps_input_file=None):
+def write_lammps_scripts(fm, universe=None, prefix='cg', folder = os.curdir, lammps_units="real", table_points=1000, lammps_input_file=None):
     """Using the given ForceMatch and Universe object, this will create a set of input files for Lammps.
     
     The function will create the given folder and put all files
@@ -288,6 +288,8 @@ def write_lammps_scripts(universe, fm, prefix='cg', folder = os.curdir, lammps_u
     loads the force fields. The given lammps input file will be appended 
     to the input script.
     """
+    if(universe is None):
+        universe = fm.u
 
     #before we change directories, we need to get the path of the lammps input file 
     if(lammps_input_file is not None):

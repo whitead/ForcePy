@@ -13,6 +13,7 @@ This script was adapted from MDAnalysis setup.py by Naveen Michaud-Agrawal.
 from ez_setup import use_setuptools
 use_setuptools()
 from setuptools import setup, Extension
+from distutils.ccompiler import new_compiler
 #
 #------------------------------------------------------------
 
@@ -91,13 +92,16 @@ if __name__ == '__main__':
                             libraries = ['m'],
                             extra_compile_args=extra_compile_args),
                   Extension('ForcePy.NeighborList', ['ForcePy/NeighborList.%s' % ("pyx" if use_cython else "c")],
+                            include_dirs=include_dirs + ['ForcePy'],
                             libraries = ['m'],
                             extra_compile_args=extra_compile_args),
                   Extension('ForcePy.Mesh', ['ForcePy/Mesh.%s' % ("pyx" if use_cython else "c")],
+                            include_dirs=include_dirs + ['ForcePy'],
                             libraries = [],
                             extra_compile_args=extra_compile_args),
 
                   Extension('ForcePy.Basis', ['ForcePy/Basis.%s' % ("pyx" if use_cython else "c")],
+                            include_dirs=include_dirs + ['ForcePy'],
                             libraries = [],
                             extra_compile_args=extra_compile_args)]
 

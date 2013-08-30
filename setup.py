@@ -86,18 +86,18 @@ if __name__ == '__main__':
         extra_compile_args = ['-O3']
         define_macros = []
 
-    extensions = [Extension('util', ['ForcePy/util.%s' % ("pyx" if use_cython else "c")],
+    extensions = [Extension('ForcePy.util', ['ForcePy/util.%s' % ("pyx" if use_cython else "c")],
                             include_dirs=include_dirs + ['ForcePy'],
                             libraries = ['m'],
                             extra_compile_args=extra_compile_args),
-                  Extension('NeighborList', ['ForcePy/NeighborList.%s' % ("pyx" if use_cython else "c")],
+                  Extension('ForcePy.NeighborList', ['ForcePy/NeighborList.%s' % ("pyx" if use_cython else "c")],
                             libraries = ['m'],
                             extra_compile_args=extra_compile_args),
-                  Extension('Mesh', ['ForcePy/Mesh.%s' % ("pyx" if use_cython else "c")],
+                  Extension('ForcePy.Mesh', ['ForcePy/Mesh.%s' % ("pyx" if use_cython else "c")],
                             libraries = [],
                             extra_compile_args=extra_compile_args),
 
-                  Extension('Basis', ['ForcePy/Basis.%s' % ("pyx" if use_cython else "c")],
+                  Extension('ForcePy.Basis', ['ForcePy/Basis.%s' % ("pyx" if use_cython else "c")],
                             libraries = [],
                             extra_compile_args=extra_compile_args)]
 

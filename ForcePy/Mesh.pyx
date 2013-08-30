@@ -52,9 +52,5 @@ cdef class UniformMesh(object):
 
 
     def __reduce__(self):
-        return make_uniformmesh, (self.l, self.r, self.dx)
+        return UniformMesh, (self.l, self.r, self.dx)
 
-def make_uniformmesh(*args):
-    return UniformMesh(*args)
-
-setattr(make_uniformmesh, '__module__', 'ForcePy.Mesh')

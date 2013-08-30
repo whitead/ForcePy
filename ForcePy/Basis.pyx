@@ -44,8 +44,6 @@ class UnitStep(object):
         return -result
 
 
-setattr(UnitStep, '__module__', 'ForcePy.Basis')
-
 cdef class Quartic(object):
 
     #The number of non-zero neighbor bins which must be evaluated 
@@ -129,12 +127,9 @@ cdef class Quartic(object):
         return -result
 
     def __reduce__(self):
-        return make_quartic, (None, None, self.basis_n, self.inv_width)
+        return Quartic, (None, None, self.basis_n, self.inv_width)
 
-def make_quartic(*args):
-    return Quartic(*args)
 
-setattr(make_quartic, '__module__', 'ForcePy.Basis')
 
 
 cdef class Gaussian(object):
@@ -220,9 +215,5 @@ cdef class Gaussian(object):
         return -result
 
     def __reduce__(self):
-        return make_gaussian, (None, None, self.basis_n, self.inv_sigma)
+        return Gaussian, (None, None, self.basis_n, self.inv_sigma)
 
-def make_gaussian(*args):
-    return Gaussian(*args)
-
-setattr(make_gaussian, '__module__', 'ForcePy.Basis')

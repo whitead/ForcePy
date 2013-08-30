@@ -1,5 +1,5 @@
-from .ForceMatch import Pairwise, min_img_vec, Bond, Angle, Dihedral
-from .Mesh import UniformMesh 
+from ForcePy.ForceMatch import Pairwise, min_img_vec, Bond, Angle, Dihedral
+from ForcePy.Mesh import UniformMesh 
 from ForcePy.util import norm3
 
 import numpy as np

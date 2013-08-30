@@ -11,7 +11,7 @@ force_and_grad: puts the forces in cache, the Nx3 grad in the grad vector. Zeros
 
 import numpy as np
 cimport numpy as np
-from ForcePy.Mesh import *
+from .Mesh import *
 import cython
 from libc.math cimport sqrt, pow , floor, ceil, exp, erf, acos
 

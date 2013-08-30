@@ -18,7 +18,7 @@ First install the development branch of MDAnalysis
     git clone https://code.google.com/p/mdanalysis/ mdanalysis
     cd mdanalysis
     git checkout develop
-    cd mdanalysis/package
+    cd package
     python setup.py install --user
     
 Next install ForcePy

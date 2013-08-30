@@ -5,7 +5,7 @@ from MDAnalysis.core.units import get_conversion_factor
 import MDAnalysis.coordinates.base as base
 import numpy as np
 import scipy.sparse as npsp
-from ForceMatch import min_img_dist, min_img, min_img_vec
+from ForcePy.ForceMatch import min_img_dist, min_img, min_img_vec
 import os
 import ForcePy.ForceCategories as ForceCategories
 

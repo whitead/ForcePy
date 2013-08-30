@@ -61,7 +61,7 @@ if use_cython:
     del Cython
 
 if __name__ == '__main__':
-    RELEASE = "0.1"     # NOTE: keep in sync with ForcePy.version in __init__.py
+    RELEASE = "0.1" 
     with open("README.md") as summary:
         LONG_DESCRIPTION = summary.read()
     CLASSIFIERS = ['Development Status :: 4 - Beta',
@@ -87,21 +87,21 @@ if __name__ == '__main__':
         extra_compile_args = ['-O3']
         define_macros = []
 
-    extensions = [Extension('ForcePy.util', ['ForcePy/util.%s' % ("pyx" if use_cython else "c")],
-                            include_dirs=include_dirs + ['ForcePy'],
+    extensions = [Extension('ForcePy.Util', ['ForcePy/Util.%s' % ("pyx" if use_cython else "c")],
+                            include_dirs=include_dirs ,
                             libraries = ['m'],
                             extra_compile_args=extra_compile_args),
                   Extension('ForcePy.NeighborList', ['ForcePy/NeighborList.%s' % ("pyx" if use_cython else "c")],
-                            include_dirs=include_dirs + ['ForcePy'],
+                            include_dirs=include_dirs ,
                             libraries = ['m'],
                             extra_compile_args=extra_compile_args),
                   Extension('ForcePy.Mesh', ['ForcePy/Mesh.%s' % ("pyx" if use_cython else "c")],
-                            include_dirs=include_dirs + ['ForcePy'],
+                            include_dirs=include_dirs ,
                             libraries = [],
                             extra_compile_args=extra_compile_args),
 
                   Extension('ForcePy.Basis', ['ForcePy/Basis.%s' % ("pyx" if use_cython else "c")],
-                            include_dirs=include_dirs + ['ForcePy'],
+                            include_dirs=include_dirs ,
                             libraries = [],
                             extra_compile_args=extra_compile_args)]
 
@@ -117,7 +117,6 @@ if __name__ == '__main__':
           license           = 'GPL 2',
           packages          = [ 'ForcePy'],
           package_dir       = {'ForcePy': 'ForcePy'},
-          ext_package       = 'ForcePy',
           ext_modules       = extensions,
           classifiers       = CLASSIFIERS,
           long_description  = LONG_DESCRIPTION,

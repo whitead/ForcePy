@@ -6,7 +6,7 @@ from MDAnalysis import Universe
 from math import *
 import matplotlib.mlab as mlab
 import matplotlib.pyplot as plt
-from ForcePy.util import *
+from ForcePy.Util import *
 from ForcePy.ForceCategories import *
 from ForcePy.CGMap import CGUniverse
 from mpi4py import MPI

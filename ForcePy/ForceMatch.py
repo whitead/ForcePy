@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from ForcePy.Util import *
 from ForcePy.ForceCategories import *
 from ForcePy.CGMap import CGUniverse
-#from mpi4py import MPI
+from mpi4py import MPI
 
 
 class ForceMatch:

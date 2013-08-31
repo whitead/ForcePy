@@ -110,7 +110,7 @@ class ForceMatch:
             for f in self.tar_forces:
                 self.cache[f] = np.copy(f.lip)
                                 
-    def force_match_mpi(self, batch_size = None, do_plots = False):
+    def force_match_mpi(self, batch_size = None, do_plots = False, repeats = 1):
         
         comm = MPI.COMM_WORLD
         size = comm.Get_size()
@@ -121,15 +121,16 @@ class ForceMatch:
             if(do_plots and rank == 0):
                 self._setup_plot()
 
-            while(index * size * batch_size < self.u.trajectory.numframes):
+            while(index * size * batch_size < self.u.trajectory.numframes * repeats):
                 self._distribute_tasks(batch_size, index * batch_size)
                 self._reduce_tasks()
                 if(do_plots and rank == 0):
                     self._plot_forces()
                 index +=1
         else:
-            self._distribute_tasks()        
-            self._reduce_tasks()
+            for i in range(repeats):
+                self._distribute_tasks()        
+                self._reduce_tasks()
 
 
 

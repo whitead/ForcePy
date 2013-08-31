@@ -121,7 +121,7 @@ class ForceMatch:
             if(do_plots and rank == 0):
                 self._setup_plot()
 
-            while(index * size < self.u.trajectory.numframes):
+            while(index * size * batch_size < self.u.trajectory.numframes):
                 self._distribute_tasks(batch_size, index * batch_size)
                 self._reduce_tasks()
                 if(do_plots and rank == 0):

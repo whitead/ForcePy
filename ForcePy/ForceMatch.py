@@ -116,21 +116,28 @@ class ForceMatch:
         size = comm.Get_size()
         rank = comm.Get_rank()
 
+        if(do_plots and rank == 0):
+            self._setup_plot()
+
+
         if(batch_size):
             index = 0
-            if(do_plots and rank == 0):
-                self._setup_plot()
-
             while(index * size * batch_size < self.u.trajectory.numframes * repeats):
                 self._distribute_tasks(batch_size, index * batch_size)
                 self._reduce_tasks()
-                if(do_plots and rank == 0):
-                    self._plot_forces()
+                if(rank == 0):
+                    print "%d / %d iterations" % (index * size * batch_size, self.u.trajectory.numframes * repeats)  
+                    if(do_plots):                    
+                        self._plot_forces()
                 index +=1
         else:
             for i in range(repeats):
-                self._distribute_tasks()        
+                self._distribute_tasks()
                 self._reduce_tasks()
+                if(rank == 0):
+                    print "%d / %d iterations" % (i, repeats)  
+                    if(do_plots):                    
+                        self._plot_forces()
 
 
 
@@ -321,7 +328,6 @@ class ForceMatch:
 
         if(batch_size):
             #use batch size
-            print "Rank %d, executing %d to %d" % (rank, spanr / 2 + rank * span + offset, spanr / 2 + rank * span + batch_size + offset)
             self._force_match_task(spanr / 2 + rank * span + offset, spanr / 2 + rank * span + batch_size + offset, rank == 0)
         else:
             #distribute equally on the trajectory

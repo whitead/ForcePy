@@ -5,7 +5,7 @@ from MDAnalysis.core.units import get_conversion_factor
 import MDAnalysis.coordinates.base as base
 import numpy as np
 import scipy.sparse as npsp
-from ForcePy.ForceMatch import min_img_dist, min_img, min_img_vec
+from ForcePy.ForceMatch import same_img
 import os
 import ForcePy.ForceCategories as ForceCategories
 
@@ -118,7 +118,7 @@ class CGUniverse(Universe):
                 #was not in selection
                 pass
 
-        self.__trajectory = CGReader(self.ref_u.trajectory, self.top_map, self.force_map, self.lfdump)
+        self.__trajectory = CGReader(self, self.ref_u.trajectory, self.top_map, self.force_map, self.lfdump)
         for a in self.atoms:
             a.universe = self
         self.atoms._rebuild_caches()
@@ -156,8 +156,9 @@ class Timestep(base.Timestep):
 
 class CGReader(base.Reader):
 
-    def __init__(self, aatraj, top_map, force_map, lfdump):
-        
+    def __init__(self, universe, aatraj, top_map, force_map, lfdump):
+
+        self.u = universe
         self.aatraj = aatraj
 
         self.top_map = top_map
@@ -197,44 +198,14 @@ class CGReader(base.Reader):
         self.ts.frame = ts.frame        
 
         #now, we must painstakingly and annoyingly put each cg group into the same periodic image
-        #and then collapse them
+        #as its residue 
         if(self.aatraj.periodic):
 
-            dim = np.shape(ts._pos)[1]
-            centering_vector = np.zeros(dim, dtype=np.float32)
-
-            for aai in range(np.shape(self.top_map)[1]):
-                ts._pos[aai,:]+=  min_img_vec(ts._pos[aai,:], centering_vector, ts.dimensions)
-
-            #same for velocites, but we might not have them so use try/except
-            try:
-                for aai in range(np.shape(self.force_map)[1]):
-                    ts._velocities[aai,:] = min_img_vec(ts._velocities[aai,:], centering_vector, ts.dimensions)
-            except AttributeError:
-                pass
-            #same for forces
-            try:
-                for aai in range(np.shape(self.force_map)[1]):
-                    ts._forces[aai,:] = min_img_vec(ts._forces[aai,:], centering_vector, ts.dimensions)
-            except AttributeError:
-                #check to see if we have a lammps force dump instead
-                if(self.lfdump):
-                    ts._forces = np.zeros( (np.shape(self.top_map)[1], dim), dtype=np.float32)
-                    while(not self.lfdump.readline().startswith('ITEM: ATOMS')):
-                        pass
-                    for i in range(len(ts._forces)):
-                        sline = self.lfdump.readline().split()
-                        #NOTE NOTE NOTE NOTE: Lammps forces seem to be negative of what I use.
-                        try:
-                            ts._forces[int(sline[0]) - 1,:] = [-float(x) for x in sline[1:]]
-                        except ValueError:
-                            print "Invalid forces line at %s" % reduce(lambda x,y: x + " " + y, sline)
-                    for aai in range(np.shape(self.force_map)[1]):
-                        ts._forces[aai,:] = min_img_vec(ts._forces[aai,:], centering_vector, ts.dimensions)
-
-                    
-
-                        
+            for r in self.u.ref_u.residues:
+                centering_vector = np.copy(r.atoms[0].pos)
+                for a in r.atoms:
+                    a.pos[:] =  same_img(a.pos[:], centering_vector, ts.dimensions)
+                                            
         self.ts._pos = self.top_map.dot( ts._pos )
         try:
             self.ts._velocities = self.top_map.dot( ts._velocities ) #COM motion
@@ -243,7 +214,23 @@ class CGReader(base.Reader):
         try:
             self.ts._forces = self.force_map.dot( ts._forces )
         except AttributeError:
-            self.ts._forces = np.zeros( (self.numatoms, 3) ,dtype=np.float32)
+            #check to see if we have a lammps force dump
+            if(self.lfdump):
+                #we do, let's read it
+                ts._forces = np.zeros( (np.shape(self.top_map)[1], dim), dtype=np.float32)
+                while(not self.lfdump.readline().startswith('ITEM: ATOMS')):
+                    pass
+                for i in range(len(ts._forces)):
+                    sline = self.lfdump.readline().split()
+                    #NOTE NOTE NOTE NOTE: Lammps forces seem to be negative of what I use.
+                    try:
+                        ts._forces[int(sline[0]) - 1,:] = [-float(x) for x in sline[1:]]
+                    except ValueError:
+                        raise IOError( "Invalid forces line at %s" % reduce(lambda x,y: x + " " + y, sline))
+                self.ts._forces = self.force_map.dot( ts._forces) 
+
+            else: #if not, then use 0
+                self.ts._forces = np.zeros( (self.numatoms, 3) ,dtype=np.float32)
 
         return self.ts
 

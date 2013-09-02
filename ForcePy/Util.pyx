@@ -19,8 +19,18 @@ def min_img_vec(np.ndarray[FTYPE_t, ndim=1] x, np.ndarray[FTYPE_t, ndim=1] y, np
     for i in range(3):
         dx[i] = x[i] - y[i]        
         if(periodic):
-            dx[i] -= cround(dx[i] / img[i])
+            dx[i] -= cround(dx[i] / img[i]) * img[i]
     return dx
+
+#put x into the same image as y
+@cython.boundscheck(False) # turn off bounds-checking for entire function
+def same_img(np.ndarray[FTYPE_t, ndim=1] x, np.ndarray[FTYPE_t, ndim=1] y, np.ndarray[FTYPE_t, ndim=1] img):
+    cdef FTYPE_t dx
+    cdef int i
+    for i in range(3):
+        dx = x[i] - y[i]        
+        x[i] -= cround(dx / img[i]) * img[i]
+    return x
 
 @cython.boundscheck(False) # turn off bounds-checking for entire function
 def min_img(np.ndarray[FTYPE_t, ndim=1] x, np.ndarray[FTYPE_t, ndim=1] img, bint periodic=True):
@@ -37,7 +47,7 @@ cpdef FTYPE_t min_img_dist_sq(np.ndarray[FTYPE_t, ndim=1] x, np.ndarray[FTYPE_t,
     for i in range(3):
         dx = x[i] - y[i]        
         if(periodic):
-            dx -= cround(dx / img[i])
+            dx -= cround(dx / img[i]) * img[i]
         dist += dx
     return dist
 

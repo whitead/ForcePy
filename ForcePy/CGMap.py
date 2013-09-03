@@ -51,44 +51,54 @@ class CGUniverse(Universe):
 
 
     def _build_structure(self):
+        #atoms cannot be written out of index order, so we 
+        #need to iterate residue by residue
         index = 0
         reverse_map = {}
         residues = {}
-        for s,n in zip(self.selections, self.names):
-            group = self.ref_u.selectAtoms(s)
-            if(group.numberOfAtoms() == 0):
-                raise ValueError("Selection '%s' matched no atoms" % s)        
-            for r in group.residues:
+        #keep track of selections, so we can throw a useful error if we don't end up selecting anything
+        selection_count = {}
+        for s in self.selections:
+            selection_count[s] = 0
+        for r in self.ref_u.residues:
+            residue_atoms = []
+            for s,n in zip(self.selections, self.names):
+                group = r.selectAtoms(s)
+                selection_count[s] += len(group)
+                
+                #make new atom
                 a = Atom(index, n, n, r.name, r.id, r.atoms[0].segid, sum([x.mass if x in group else 0 for x in r]), 0) 
                 index += 1
-                for ra in r.atoms:
-                    if ra in group:
-                        reverse_map[ra] = a
+                for ra in group:
+                    reverse_map[ra] = a
 
-                #check to see if this residue exists yet
-                #and add the atom
-                if( r.id in residues ):
-                    residues[r.id] += a
-                else:
-                    residues[r.id] = Residue(r.name, r.id, [a], resnum=r.resnum)
-                a.residue = residues[r.id]
-                #add the atom
+                #append atom to new residue atom group
+                residue_atoms.append(a)
+                #add the atom to Universe
                 self.atoms += a
+            #now actually create new residue and give atoms a reference to it
+            residues[r.id] = Residue(r.name, r.id, residue_atoms, resnum=r.resnum)
+            for a in residue_atoms:
+                a.residue = residues[r.id]
+        #check to make sure we selected something
+        for s,count in zip(self.selections, selection_count):
+            if(count == 0):
+                raise ValueError("Selection '%s' matched no atoms" % s)        
+
         
 
         #find hydrogens and collapse them into beads 
         if(self.chydrogens):
             for b in self.ref_u.bonds:
                 #my hack for inferring a hydrogen
-                for a1,a2 in zip((b.atom1, b.atom2), (b.atom2, b.atom1)):
+                for a1,a2 in [(b.atom1, b.atom2), (b.atom2, b.atom1)]:
                     if(a1.type.startswith("H") and a1.mass < 4.):
                         reverse_map[a1] = reverse_map[a2]
                         #add the mass
-                        reverse_map[a1].mass += a1.mass
+                        reverse_map[a2].mass += a1.mass
         
         #generate matrix mappings for center of mass and sum of forces
         # A row is a mass normalized cg site defition. or unormalized 1s for forces
-
         self.top_map = npsp.lil_matrix( (self.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) , dtype=np.float32)
         self.force_map = npsp.lil_matrix( (self.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) , dtype=np.float32)
 
@@ -135,7 +145,7 @@ class CGUniverse(Universe):
 
         if(not os.path.exists(directory)):
             os.mkdir(directory)
-        structure = os.path.join(directory, "cg.pdb")
+        structure = os.path.join(directory, "cg.gro")
         trajectory = os.path.join(directory, "cg.trr")
         write_structure(self, structure, bonds='all')
         write_trajectory(self, trajectory)
@@ -257,13 +267,16 @@ def add_residue_bonds(universe, selection1, selection2):
     """This function will add bonds between atoms mathcing selections and 2
     within any residue
     """
-
-    for r in universe.atoms.residues:
+    count = 0
+    for r in universe.atoms.residues:        
+        print r.atoms
         group1 = r.selectAtoms(selection1)
         group2 = r.selectAtoms(selection2)            
         for a1 in group1:
             for a2 in group2:
-                universe.bonds.add( Bond(a1, a2) )
+                universe.bonds.append( Bond(a1, a2) )
+                count += 1
+    print "Added %d bonds" % count
             
 
 def write_lammps_scripts(fm, universe=None, prefix='cg', folder = os.curdir, lammps_units="real", table_points=1000, lammps_input_file=None):
@@ -428,5 +441,5 @@ def write_lammps_scripts(fm, universe=None, prefix='cg', folder = os.curdir, lam
                     output.write(line)
 
     #now write a pdb, I've found that can come in handy
-    universe.atoms.write("%s_start.pdb" % prefix, bonds="all")
+    universe.atoms.write("%s_start.pdb" % prefix, bonds='all')
         

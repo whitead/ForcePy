@@ -123,24 +123,42 @@ class ForceMatch:
         if(batch_size):
             index = 0
             while(index * size * batch_size < self.u.trajectory.numframes * repeats):
-                self._distribute_tasks(batch_size, index * batch_size)
+                try:
+                    self._distribute_tasks(batch_size, index * batch_size)
+                except IOError:
+                    #finished iterations, trajectory is done
+                    if(rank == 0):
+                        print "%d / %d iterations" % (index * size * batch_size, self.u.trajectory.numframes * repeats)  
+                        if(do_plots):                    
+                            self._plot_forces()
+                    break
+
                 self._reduce_tasks()
                 if(rank == 0):
                     print "%d / %d iterations" % (index * size * batch_size, self.u.trajectory.numframes * repeats)  
                     if(do_plots):                    
                         self._plot_forces()
                 index +=1
+            self._reduce_tasks()
+
         else:
             for i in range(repeats):
-                self._distribute_tasks()
+                try:
+                    self._distribute_tasks()
+                except IOError:
+                    if(rank == 0):
+                        print "%d / %d iterations" % (i, repeats)  
+                        if(do_plots):                    
+                            self._plot_forces()
+                    break
+                    
                 self._reduce_tasks()
                 if(rank == 0):
                     print "%d / %d iterations" % (i, repeats)  
                     if(do_plots):                    
                         self._plot_forces()
 
-
-
+            self._reduce_tasks()
         
         
 

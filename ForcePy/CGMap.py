@@ -269,7 +269,6 @@ def add_residue_bonds(universe, selection1, selection2):
     """
     count = 0
     for r in universe.atoms.residues:        
-        print r.atoms
         group1 = r.selectAtoms(selection1)
         group2 = r.selectAtoms(selection2)            
         for a1 in group1:

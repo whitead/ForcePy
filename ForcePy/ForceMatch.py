@@ -4,12 +4,23 @@ import numpy.linalg as ln
 from math import ceil
 from MDAnalysis import Universe
 from math import *
-import matplotlib.mlab as mlab
-import matplotlib.pyplot as plt
+try:
+    import matplotlib.mlab as mlab
+    import matplotlib.pyplot as plt
+    plotting_support = True
+except ImportError as e:
+    plotting_support = False
+    plotting_error = e
+    
 from ForcePy.Util import *
 from ForcePy.ForceCategories import *
 from ForcePy.CGMap import CGUniverse
-from mpi4py import MPI
+try:
+    from mpi4py import MPI
+    mpi_support = True
+except ImportError as e:
+    mpi_support = False
+    mpi_error = e
 
 
 class ForceMatch:
@@ -24,7 +35,7 @@ class ForceMatch:
         self.u = cguniverse
         self._load_json(input_file) 
         self.force_match_calls = 0
-        self.plot_frequency = 1
+        self.plot_frequency = 1 if plotting_support else -1
         self.plot_output = None
         self.atom_type_map = None
         self.tar_force_buffer = None
@@ -111,6 +122,9 @@ class ForceMatch:
                 self.cache[f] = np.copy(f.lip)
                                 
     def force_match_mpi(self, batch_size = None, do_plots = False, repeats = 1):
+        
+        if(not mpi_support):
+            raise mpi_error
         
         comm = MPI.COMM_WORLD
         size = comm.Get_size()
@@ -460,6 +474,10 @@ class ForceMatch:
 
 
     def _setup_plot(self):
+
+        if(not plotting_support):
+            raise plotting_error
+
         plot_fig = plt.figure()
 
         #try to maximize the window

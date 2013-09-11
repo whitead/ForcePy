@@ -297,6 +297,7 @@ def write_lammps_scripts(fm, universe=None, prefix='cg', folder = os.curdir, lam
 
     if(not os.path.exists(folder)):
         os.mkdir(folder)
+    original_dir = os.path.abspath(os.getcwd())
     os.chdir(folder)
  
     #write force tables
@@ -442,3 +443,5 @@ def write_lammps_scripts(fm, universe=None, prefix='cg', folder = os.curdir, lam
     #now write a pdb, I've found that can come in handy
     universe.atoms.write("%s_start.pdb" % prefix, bonds='all')
         
+    #now go back to original directory
+    os.chdir(original_dir)

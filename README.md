@@ -20,15 +20,15 @@ Installing ForcePy
 Dependencies
 ----------
 
-*Python2.7
-*scipy/numpy
-*MDAnalysis (development branch)
+* Python2.7
+* scipy/numpy
+* MDAnalysis (development branch)
 
 Optional Dependencies
 ----------
 
-*MPI4Py (for parallel force-matching)
-*matplotlib (for plotting)
+* MPI4Py (for parallel force-matching)
+* matplotlib (for plotting)
 
 Install
 ----------
@@ -262,13 +262,13 @@ constant changes.
 
 Meshes
 ============
-*Uniform mesh
+* Uniform mesh
 
 Basis functions
 =============
-*UnitStep
-*Quartic
-*Gaussian
+* UnitStep
+* Quartic
+* Gaussian
 
 Forces
 =========

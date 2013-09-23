@@ -70,8 +70,10 @@ an all-atom water simulation to a 2-site water model.
 
 The first step is to import the necessary libraries:
 
-    from MDAnalysis import Universe
-    from ForcePy import *
+```python
+from MDAnalysis import Universe
+from ForcePy import *
+```
 
 Next, we load the fine-grained trajectory. The first file
 is the structure (`pdb`, `tpr`, `gro`, or `psf`) and the
@@ -81,22 +83,28 @@ on what version of gromacs with which the `tpr` file was created. See the
 about the `tpr` file format support in MDAnalysis. The code to load the 
 fine-grained trajectory is:
 
-    fine_uni = Universe("foo.tpr", "foo.trr")
+```python
+fine_uni = Universe("foo.tpr", "foo.trr")
+```
 
 Now we create a coarse-grained trajectory using the fine-grained trajectory as 
 an input:
 
-    coarse_uni =CGUniverse(fine_uni, selections=['name OW', 'name HW1 or name HW2'], 
-                          names=['O', 'H2'], 
-			  collapse_hydrogens=False)
+```python
+coarse_uni =CGUniverse(fine_uni, selections=['name OW', 'name HW1 or name HW2'], 
+                      names=['O', 'H2'], 
+                       collapse_hydrogens=False)
+```
 
 The `selections` variable is an array of strings. Each string is a
 Charmm atom selection string. Note, these are very similar to VMD
 selection string. You may test them out using the following snippet::
 
-    selected_atoms = fine_uni.selectAtoms('name OW')
-    for a in selected_atoms:
-        print a
+```python
+selected_atoms = fine_uni.selectAtoms('name OW')
+for a in selected_atoms:
+    print a
+```
 
 In the example above water oxygen is the first string and water hydrogens
 are the second string. The next variable, `names`, is optional and is
@@ -112,9 +120,11 @@ is `True`.
 Now that you have a coarse-grained trajectory, you may write out the
 structure or trajectory using the following syntax:
 
-    coarse_uni.write_structure("cg_foo.pdb")
-    coarse_uni.write_structure("cg_foo.pdb", bonds='all')
-    coarse_uni.write_trajectory("cg_foo.dcd")
+```python
+coarse_uni.write_structure("cg_foo.pdb")
+coarse_uni.write_structure("cg_foo.pdb", bonds='all')
+coarse_uni.write_trajectory("cg_foo.dcd")
+```
     
 
 The coarse-grained trajectory is also a valid MDAnalysis object and
@@ -127,7 +137,9 @@ Adding Bonds
 Bonding information isn't always included in pdb files. To add a bond
 manually, use this line of code:
 
-    add_residue_bonds(coarse_uni, 'name O', 'name H2')    
+```python
+add_residue_bonds(coarse_uni, 'name O', 'name H2')    
+```
 
 This will bond all atoms named `O` with all atoms named `H2` *within
 each residue*.
@@ -137,55 +149,66 @@ Force-Matching
 Let's use again the example of 2-site water. If the original all-atom
 trajectory had forces, then we may use this file for force-matching.
 
-    from MDAnalysis import Universe
-    from ForcePy import *
-    import pickle
+```python
+from MDAnalysis import Universe
+from ForcePy import *
+import pickle
     
-    fgu = Universe('topol.tpr', 'traj.trr')
-    fgu.trajectory.periodic = True #NOTE: You MUST set this flag yourself, since there is no indication in the TPR files
-    cgu = CGUniverse(fgu, ['name OW', 'name HW1 or name HW2'], ['O', 'H2'], False)
-    add_residue_bonds(cgu, 'name O', 'name H2')
-    fm = ForceMatch(cgu, kT=0.7) #kT is Bolzmann's constant times temperature in the units of the simulation
-    
+fgu = Universe('topol.tpr', 'traj.trr')
+fgu.trajectory.periodic = True #NOTE: You MUST set this flag yourself, since there is no indication in the TPR files
+cgu = CGUniverse(fgu, ['name OW', 'name HW1 or name HW2'], ['O', 'H2'], False)
+add_residue_bonds(cgu, 'name O', 'name H2')
+fm = ForceMatch(cgu, kT=0.7) #kT is Bolzmann's constant times temperature in the units of the simulation
+```    
+
 At this point, we have a `ForeMatch` object which contains the
 coarse-grained universe. Now we need to set-up the force field which
 will be force-matched to fit the coarse-grained trajectory forces
 (which themselves came from the all-atom trajectory).
 
-    ff = FileForce() #This just says the forces are found in the universe passed to the ForceMatch object
-    #Set this force as the reference force to be matched
-    fm.add_ref_force(ff)    
+```python 
+ff = FileForce() #This just says the forces are found in the universe passed to the ForceMatch object
+#Set this force as the reference force to be matched
+fm.add_ref_force(ff)    
 
-    pair_mesh = Mesh.UniformMesh(0,12,0.05) #This is the mesh on which the force-field will be built. It is in Angstroms
-    pairwise_force = SpectralForce(Pairwise, pair_mesh, Basis.UnitStep)                  
-    #Copy this force type and clone it for each pair-interaction type
-    fm.add_and_type_pair(pairwise_force)
-    #This is a harmonic bond that will be fixed to the energy minimum of the bonds with a harmonic constant of 500 kJ/mol
-    bond_force = FixedHarmonicForce(Bond, 500, cutoff=1) 
-    fm.add_and_type_pair(bond_force)
+pair_mesh = Mesh.UniformMesh(0,12,0.05) #This is the mesh on which the force-field will be built. It is in Angstroms
+pairwise_force = SpectralForce(Pairwise, pair_mesh, Basis.UnitStep)  
+#Copy this force type and clone it for each pair-interaction type
+fm.add_and_type_pair(pairwise_force)
+#This is a harmonic bond that will be fixed to the energy minimum of the bonds with a harmonic constant of 500 kJ/mol
+bond_force = FixedHarmonicForce(Bond, 500, cutoff=1) 
+fm.add_and_type_pair(bond_force)
+```
     
 At this point, can now force match. To do it in serial:
 
-    fm.force_match()
+```python    
+fm.force_match()
+```
     
 You may also pass an `iterations` argument to use less than the entire
 trajectory. To do it in parallel (note you must have started using
 mpirun, mpiexec, or aprun depending on your MPI environment)
 
-    fm.force_match_mpi()
+```python    
+fm.force_match_mpi()
+```
 
 One thing about MPI runs is that it's much faster to pre-compute all
 the trajectory mapping at the beginning so that it isn't repeated on
 each node. This may be done by changing a line:
 
-    cgu = CGUniverse(fgu, ['name OW', 'name HW1 or name HW2'], ['O', 'H2'], False)
-    #this will precompute the cg trajectory at every frame; this may take some time
-    cgu = cgu.cache()
+```python    
+cgu = CGUniverse(fgu, ['name OW', 'name HW1 or name HW2'], ['O', 'H2'], False)
+#this will precompute the cg trajectory at every frame; this may take some time
+cgu = cgu.cache()
+```
 
 Finally, to write out the a set of lammps scripts to use the new force field, run
-    
-    fm.write_lammps_scripts()
 
+```python    
+fm.write_lammps_scripts()
+```
   
 Architecture Notes
 ==================

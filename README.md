@@ -14,18 +14,19 @@ Usage Examples
 3. Writing out a force-field to a lammps-style tabulated potential
 
 
-Install
+Installing ForcePy
 ===============
 
 Dependencies
-
 ----------
+
 *Python2.7
 *scipy/numpy
 *MDAnalysis (development branch)
 
 Optional Dependencies
 ----------
+
 *MPI4Py (for parallel force-matching)
 *matplotlib (for plotting)
 
@@ -34,11 +35,13 @@ Install
 
 First install the development branch of MDAnalysis
 
-    git clone https://code.google.com/p/mdanalysis/ mdanalysis
-    cd mdanalysis
-    git checkout develop
-    cd package
-    python setup.py install --user
+```shell    
+git clone https://code.google.com/p/mdanalysis/ mdanalysis
+cd mdanalysis
+git checkout develop
+cd package
+python setup.py install --user
+```
     
 Next install ForcePy
      
@@ -55,8 +58,9 @@ distribution, try adding this line to your `~/.profile` or
 
     export C_INCLUDE_PATH=/opt/local/include:/Library/Frameworks/EPD64.framework/Versions/7.2/lib/python2.7/site-packages/numpy/core/include:$C_INCLUDE_PATH
 
-Coarse-graining a Trajectory
+Coarse-graining a trajectory
 ==========
+
 The ForcePy module can be used to coarse-grained a trajectory. In this example, we'll convert 
 an all-atom water simulation to a 2-site water model.
 

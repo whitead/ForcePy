@@ -1,29 +1,11 @@
 from MDAnalysis import Universe
-from forcematch import *
+from ForcePy import *
 import numpy as np
 
-def unit_step(x, mesh):
-    result = np.zeros(len(mesh))
-    result[mesh.mesh_index(x)] = 1
-    return result
-
-def int_unit_step(x, mesh):
-    result = np.zeros(len(mesh))
-    mesh_point = mesh.mesh_index(x)
-    for i in range(len(mesh) - 1, mesh_point - 1, -1):
-        result[i] = (mesh[i + 1] - mesh[i])
-    return -result
-    
-
-fm = ForceMatch(Universe("test/lj.pdb", "test/lj.xyz"), "test/lj.json")
-#fm = ForceMatch("test/methanol.json")
-#ff = FileForce()
-ff = LJForce(3)
-pwf = SpectralForce(Pairwise, UniformMesh(0,3,0.025), unit_step)
-pwf.set_potential(int_unit_step)
-#pwf = LJForce(sigma=1.5, epsilon=0.9)
-pwf.add_regularizer(SmoothRegularizer)
+fm = ForceMatch(Universe("cg.pdb", "cg.trr"), 0.7)
+ff = FileForce()
+pwf = SpectralForce(Pairwise, Mesh.UniformMesh(0,10,0.1), Basis.UnitStep)
+#pwf.add_regularizer(SmoothRegularizer)
 fm.add_ref_force(ff)
 fm.add_and_type_pair(pwf)
 fm.force_match()
-#fm.observation_match(10, obs_samples=25)

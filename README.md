@@ -1,4 +1,4 @@
-ForcePy
+Summary
 =======
 
 Force matching code. Supports input from Gromacs and Lammps. Not
@@ -6,12 +6,31 @@ tested for input NAMD simulations. Outputs Lammps tabular potentials
 and input files. Also can be used for topology reduction in
 coarse-graining.
 
-Dependencies
-==========
-    matplotlib, scipy, MDAnalysis, python2.7
+Usage Examples
+===============
+
+1. Taking an all-atom trajectory and mapping it to a coarse-grained trajectory with CG-sites defined using Charmm/VMD-style selection strings
+2. Using forces from an all-atom trajectory and creating a force-field that matches those forces
+3. Writing out a force-field to a lammps-style tabulated potential
+
 
 Install
 ===============
+
+Dependencies
+
+----------
+*Python2.7
+*scipy/numpy
+*MDAnalysis (development branch)
+
+Optional Dependencies
+----------
+*MPI4Py (for parallel force-matching)
+*matplotlib (for plotting)
+
+Install
+----------
 
 First install the development branch of MDAnalysis
 
@@ -38,7 +57,8 @@ distribution, try adding this line to your `~/.profile` or
 
 Coarse-graining a Trajectory
 ==========
-The ForcePy module can be used to coarse-grained a trajectory.
+The ForcePy module can be used to coarse-grained a trajectory. In this example, we'll convert 
+an all-atom water simulation to a 2-site water model.
 
 The first step is to import the necessary libraries:
 
@@ -64,13 +84,13 @@ an input:
 
 The `selections` variable is an array of strings. Each string is a
 Charmm atom selection string. Note, these are very similar to VMD
-selection string. You may test them out using the following syntax:
+selection string. You may test them out using the following snippet::
 
     selected_atoms = fine_uni.selectAtoms('name OW')
     for a in selected_atoms:
         print a
 
- In this example water oxygen is the first string and water hydrogens
+In the example above water oxygen is the first string and water hydrogens
 are the second string. The next variable, `names`, is optional and is
 the array of names to be given to the selections. It is an array of
 strings the same length as `selections`. If `names` is not given, then
@@ -99,11 +119,66 @@ Adding Bonds
 Bonding information isn't always included in pdb files. To add a bond
 manually, use this line of code:
 
-    coarse_uni.add_residue_bonds('name O', 'name H2')    
+    add_residue_bonds(coarse_uni, 'name O', 'name H2')    
 
 This will bond all atoms named `O` with all atoms named `H2` *within
 each residue*.
 
+Force-Matching
+===================
+Let's use again the example of 2-site water. If the original all-atom
+trajectory had forces, then we may use this file for force-matching.
+
+    from MDAnalysis import Universe
+    from ForcePy import *
+    import pickle
+    
+    fgu = Universe('topol.tpr', 'traj.trr')
+    fgu.trajectory.periodic = True #NOTE: You MUST set this flag yourself, since there is no indication in the TPR files
+    cgu = CGUniverse(fgu, ['name OW', 'name HW1 or name HW2'], ['O', 'H2'], False)
+    add_residue_bonds(cgu, 'name O', 'name H2')
+    fm = ForceMatch(cgu, kT=0.7) #kT is Bolzmann's constant times temperature in the units of the simulation
+    
+At this point, we have a `ForeMatch` object which contains the
+coarse-grained universe. Now we need to set-up the force field which
+will be force-matched to fit the coarse-grained trajectory forces
+(which themselves came from the all-atom trajectory).
+
+    ff = FileForce() #This just says the forces are found in the universe passed to the ForceMatch object
+    #Set this force as the reference force to be matched
+    fm.add_ref_force(ff)    
+
+    pair_mesh = Mesh.UniformMesh(0,12,0.05) #This is the mesh on which the force-field will be built. It is in Angstroms
+    pairwise_force = SpectralForce(Pairwise, pair_mesh, Basis.UnitStep)                  
+    #Copy this force type and clone it for each pair-interaction type
+    fm.add_and_type_pair(pairwise_force)
+    #This is a harmonic bond that will be fixed to the energy minimum of the bonds with a harmonic constant of 500 kJ/mol
+    bond_force = FixedHarmonicForce(Bond, 500, cutoff=1) 
+    fm.add_and_type_pair(bond_force)
+    
+At this point, can now force match. To do it in serial:
+
+    fm.force_match()
+    
+You may also pass an `iterations` argument to use less than the entire
+trajectory. To do it in parallel (note you must have started using
+mpirun, mpiexec, or aprun depending on your MPI environment)
+
+    fm.force_match_mpi()
+
+One thing about MPI runs is that it's much faster to pre-compute all
+the trajectory mapping at the beginning so that it isn't repeated on
+each node. This may be done by changing a line:
+
+    cgu = CGUniverse(fgu, ['name OW', 'name HW1 or name HW2'], ['O', 'H2'], False)
+    #this will precompute the cg trajectory at every frame; this may take some time
+    cgu = cgu.cache()
+
+Finally, to write out the a set of lammps scripts to use the new force field, run
+    
+    fm.write_lammps_scripts()
+
+  
 Architecture Notes
 ==================
 
@@ -114,23 +189,21 @@ match. For example, a `FileForce` will read in forces from a file. The
 which are the functional forms that are going to match the reference
 forces. Some `Force` objects contain a static class variable that
 points to a `ForceCategory` that contains useful
-methods/variables. For example, the `PairwiseCategory` contains a
+methods/variables. For example, the `Pairwise` contains a
 neighborlist implementation.
 
 Regularizers may be added to force objects as well by calling the
 `add_regularizer` method.
 
-The `PairwiseSpectralForce` is a linear combination of basis
-functions. This is usually a good choice. The `PairwiseSpectralForce`
-requires a mesh and basis function. Currently only `UniformMesh` is
-implemented. For the basis functions, `UnitStep` and `Quartic` is
+The `SpectralForce` is a linear combination of basis functions. This
+is usually a good choice. The `SpectralForce` requires a mesh and
+basis function. Currently only `UniformMesh` is implemented. For the
+basis functions, `UnitStep`, `Quartic`, and `Gaussian` are
 implemented.
 
 A given `Force` may be 'specialized' to work on only a certain type or
 type pair. This may be done by calling `specialize_type` before it is
-added to a `ForceMatch` class. Another point is in the fact that the
-gradients don't depend on the weights for the `PairwiseSpectralForce`
-force.
+added to a `ForceMatch` class.
 
 In order to simplify constructing potentials for many type pairs,
 there are utility functions on the ForceMatch class to construct all
@@ -140,6 +213,8 @@ interaction.
 
 Observable Variable
 ===============
+
+*Under Construction*
 
 The target forcefield/potential may be modified to reproduce some
 observable parameter.  The observable should be in a tabular file
@@ -153,8 +228,6 @@ working with potentials. This gradient, by the way, depends on the
 current potential correct since the derivative of the normalization
 constant changes.
 
-More to come in this section
-
 
 Meshes
 ============
@@ -162,8 +235,9 @@ Meshes
 
 Basis functions
 =============
-*unit step
+*UnitStep
 *Quartic
+*Gaussian
 
 Forces
 =========
@@ -178,3 +252,10 @@ Regularizers
 ==========
 * SmoothRegularizer
 * L2Regularizer
+
+
+
+
+
+
+

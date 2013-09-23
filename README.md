@@ -35,7 +35,7 @@ Install
 
 First install the development branch of MDAnalysis
 
-```shell    
+```sh
 git clone https://code.google.com/p/mdanalysis/ mdanalysis
 cd mdanalysis
 git checkout develop
@@ -44,11 +44,13 @@ python setup.py install --user
 ```
     
 Next install ForcePy
-     
-     cd ../../
-     git clone https://github.com/whitead/ForcePy.git ForcePy
-     cd ForcePy
-     python setup.py install --user
+
+```sh     
+cd ../../
+git clone https://github.com/whitead/ForcePy.git ForcePy
+cd ForcePy
+python setup.py install --user
+```
 
 If you see a long list of errors, check the first few. If it says it
 can't find `arrayobject.h`, then your numpy headers are not being
@@ -56,7 +58,9 @@ found. If you're in the Voth group and using the Enthought python
 distribution, try adding this line to your `~/.profile` or
 `~/.bash_profile` file:
 
-    export C_INCLUDE_PATH=/opt/local/include:/Library/Frameworks/EPD64.framework/Versions/7.2/lib/python2.7/site-packages/numpy/core/include:$C_INCLUDE_PATH
+```bash
+export C_INCLUDE_PATH=/opt/local/include:/Library/Frameworks/EPD64.framework/Versions/7.2/lib/python2.7/site-packages/numpy/core/include:$C_INCLUDE_PATH
+```
 
 Coarse-graining a trajectory
 ==========

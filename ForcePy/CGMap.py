@@ -227,7 +227,7 @@ class CGReader(base.Reader):
             #check to see if we have a lammps force dump
             if(self.lfdump):
                 #we do, let's read it
-                ts._forces = np.zeros( (np.shape(self.top_map)[1], dim), dtype=np.float32)
+                ts._forces = np.zeros( (np.shape(self.top_map)[1], 3), dtype=np.float32)
                 while(not self.lfdump.readline().startswith('ITEM: ATOMS')):
                     pass
                 for i in range(len(ts._forces)):

@@ -4,6 +4,7 @@ import numpy.linalg as ln
 from math import ceil
 from MDAnalysis import Universe
 from math import *
+import ForcePy.ForceCategories as ForceCategories
 try:
     import matplotlib.mlab as mlab
     import matplotlib.pyplot as plt

@@ -67,7 +67,12 @@ class CGUniverse(Universe):
                 selection_count[s] += len(group)
                 
                 #make new atom
-                a = Atom(index, n, n, r.name, r.id, r.atoms[0].segid, sum([x.mass if x in group else 0 for x in r]), 0) 
+                new_mass = sum([x.mass if x in group else 0 for x in r])
+                if(sum([1 if x in group else 0 for x in r]) > 0 and new_mass == 0):                    
+                    raise ValueError('Zero mass CG particle found! Please check all-atom masses and/or set them manually via "fine_grain_universe.selectAtoms(...).set_mass(...)')
+
+                a = Atom(index, n, n, r.name, r.id, r.atoms[0].segid, new_mass, 0) 
+
                 index += 1
                 for ra in group:
                     reverse_map[ra] = a
@@ -95,8 +100,8 @@ class CGUniverse(Universe):
                     if(a1.type.startswith("H") and a1.mass < 4.):
                         reverse_map[a1] = reverse_map[a2]
                         #add the mass
-                        reverse_map[a2].mass += a1.mass
-        
+                        reverse_map[a2].mass += a1.mass        
+
         #generate matrix mappings for center of mass and sum of forces
         # A row is a mass normalized cg site defition. or unormalized 1s for forces
         self.top_map = npsp.lil_matrix( (self.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) , dtype=np.float32)
@@ -110,7 +115,7 @@ class CGUniverse(Universe):
                 #was not selected
                 pass
         
-        #Put them into efficient sparse matrix. Should probably test this more
+        #Put them into efficient sparse matrix.
         self.top_map = self.top_map.tobsr()
         self.force_map = self.force_map.tobsr()
                                     
@@ -145,11 +150,13 @@ class CGUniverse(Universe):
 
         if(not os.path.exists(directory)):
             os.mkdir(directory)
-        structure = os.path.join(directory, "cg.gro")
+        structure = os.path.join(directory, "cg.pdb")
         trajectory = os.path.join(directory, "cg.trr")
         write_structure(self, structure, bonds='all')
-        write_trajectory(self, trajectory)
-        return Universe(structure, trajectory)
+        write_trajectory(self, trajectory)        
+        u = Universe(structure, trajectory)
+        apply_mass_map(u, create_mass_map(self))
+        return u
     
 
 class Timestep(base.Timestep):
@@ -262,6 +269,23 @@ def write_trajectory(universe, filename):
     for ts in universe.trajectory:
         w.write(ts)
     w.close()
+
+def create_mass_map(universe):
+    """Create a map of masses for atom types in a universe so that they can be applied to a universe without masses assigned
+       to atoms. This is useful if writing a universe with a format that doesn't include masses (gro, pdb).
+    """
+    mass_map = {}
+    for a in universe.atoms:
+        if(not a.type in mass_map):
+            mass_map[a.type] = a.mass
+    return mass_map
+
+def apply_mass_map(universe, mass_map):
+    """Apply a mass_map created by a call to `create_mass_map`
+    """
+    for k,v in mass_map.iteritems():
+        universe.selectAtoms('type {}'.format(k)).set_mass(v)
+
 
 def add_residue_bonds(universe, selection1, selection2):
     """This function will add bonds between atoms mathcing selections and 2

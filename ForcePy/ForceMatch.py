@@ -15,7 +15,7 @@ except ImportError as e:
     
 from ForcePy.Util import *
 from ForcePy.ForceCategories import *
-from ForcePy.CGMap import CGUniverse
+from ForcePy.CGMap import CGUniverse, apply_mass_map, create_mass_map
 try:
     from mpi4py import MPI
     mpi_support = True
@@ -92,6 +92,8 @@ class ForceMatch:
         #store the filename and trajectory of the universe
         odict['structure_filename'] = self.u.filename
         odict['trajectory_filename'] = self.u.trajectory.filename
+        odict['mass_map'] = create_mass_map(self.u)
+        
 
         return odict
         
@@ -99,6 +101,7 @@ class ForceMatch:
         self.__dict__.update(dict)
         #reconstruct the universe
         self.u = Universe(dict['structure_filename'], dict['trajectory_filename'])
+        apply_mass_map(self.u, dict['mass_map'])
         
 
     def add_tar_force(self, *forces):

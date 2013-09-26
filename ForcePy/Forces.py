@@ -1,6 +1,6 @@
-from ForcePy.ForceMatch import Pairwise, min_img_vec, Bond, Angle, Dihedral
+from ForcePy.ForceCategories import Pairwise, Bond, Angle, Dihedral
 from ForcePy.Mesh import UniformMesh 
-from ForcePy.Util import norm3, spec_force_inner_loop
+from ForcePy.Util import norm3, spec_force_inner_loop, min_img_vec
 
 import numpy as np
 import random
@@ -467,13 +467,15 @@ class FixedHarmonicForce(AnalyticForce):
        The spring constant is set, but the equilibrium distance may 
        optimized if it's not set in the constructor
     """
-    def __init__(self, category, k, x0=None, cutoff=None):
-        super(FixedHarmonicForce, self).__init__(category, HarmonicForce.force, self.grad, 2, cutoff, HarmonicForce.potential)
+    def __init__(self, category, k, x0=None, x0_guess=None):
+        super(FixedHarmonicForce, self).__init__(category, HarmonicForce.force, self.grad, 2, None, HarmonicForce.potential)
         self.k = k
         self.x0 = x0
         self.w[0] = k
         if(self.x0 is not None):
             self.w[1] = self.x0
+        elif(x0_guess is not None):
+            self.w[1] = x0_guess
         
 
     def clone_force(self):

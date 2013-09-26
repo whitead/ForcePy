@@ -32,7 +32,7 @@ class Pairwise(ForceCategory):
             Pairwise.instance = Pairwise(args[0])
         else:
             #check cutoff
-            if(Pairwise.instance.cutoff != args[0]):
+            if(Pairwise.instance.cutoff < args[0]):
                 raise RuntimeError("Incompatible cutoffs")
         return Pairwise.instance
     

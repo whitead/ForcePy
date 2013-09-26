@@ -272,7 +272,7 @@ class ForceMatch:
             self.force_match_calls += 1
 
             #sample particles and run updates on them 
-            for i in range(self.u.atoms.numberOfAtoms()):
+            for i in random.sample(range(self.u.atoms.numberOfAtoms()),self.u.atoms.numberOfAtoms()):
                 #calculate net forces deviation
                 df = np.array(ref_forces[i], dtype=np.float32)
                 for f in self.tar_forces:

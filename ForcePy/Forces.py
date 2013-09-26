@@ -467,12 +467,12 @@ class FixedHarmonicForce(AnalyticForce):
        The spring constant is set, but the equilibrium distance may 
        optimized if it's not set in the constructor
     """
-    def __init__(self, category, k, x0=None, cutoff=None, force_match_k=False):
+    def __init__(self, category, k, x0=None, cutoff=None, include_k=False):
         super(FixedHarmonicForce, self).__init__(category, HarmonicForce.force, self.grad, 2, cutoff, HarmonicForce.potential)
         self.k = k
         self.x0 = x0
         self.w[0] = k
-        self.force_match_k = force_match_k
+        self.include_k = include_k
         if(self.x0 is not None):
             self.w[1] = self.x0
         
@@ -483,7 +483,7 @@ class FixedHarmonicForce(AnalyticForce):
 
     def calc_particle_force(self, i, u):
 
-        if(not self.force_match_k):
+        if(not self.include_k):
             self.w[0] = 0
         result = super(FixedHarmonicForce, self).calc_particle_force(i, u)
         self.w[0] = self.k

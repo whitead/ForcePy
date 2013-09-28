@@ -642,6 +642,7 @@ class SpectralForce(Force):
         self.temp_force.fill(0)
         self.temp_grad.fill(0)
 
+
         #check type
         if(self.mask1[i]):
             maskj = self.mask2

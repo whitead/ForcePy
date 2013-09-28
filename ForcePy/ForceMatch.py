@@ -209,6 +209,7 @@ class ForceMatch:
                     self._plot_forces()
 
             #track error
+            net_f = 0
             net_df = 0
             self.force_match_calls += 1
 
@@ -216,6 +217,7 @@ class ForceMatch:
             for i in random.sample(range(self.u.atoms.numberOfAtoms()),self.u.atoms.numberOfAtoms()):
                 #calculate net forces deviation
                 df = np.array(ref_forces[i], dtype=np.float32)
+                net_f += ln.norm(df)
                 for f in self.tar_forces:
                     df -= f.calc_particle_force(i,self.u)
                 net_df += ln.norm(df)
@@ -238,8 +240,7 @@ class ForceMatch:
             ref_forces.fill(0)
             self._teardown()
 
-            #log of the error
-            print "log error at %d  = %g" % (iterations, 0 if net_df < 1 else log(net_df))
+            print "relative error at %d  = %g" % (iterations, sqrt(net_df / net_f))
             
             iterations -= 1
             if(iterations == 0):
@@ -272,12 +273,14 @@ class ForceMatch:
 
             #track error
             net_df = 0
+            net_f = 0
             self.force_match_calls += 1
 
             #sample particles and run updates on them 
             for i in random.sample(range(self.u.atoms.numberOfAtoms()),self.u.atoms.numberOfAtoms()):
                 #calculate net forces deviation
                 df = np.array(ref_forces[i], dtype=np.float32)
+                net_f += ln.norm(df)
                 for f in self.tar_forces:
                     df -= f.calc_particle_force(i,self.u)
                 net_df += ln.norm(df)
@@ -300,9 +303,9 @@ class ForceMatch:
             ref_forces.fill(0)
             self._teardown()
 
-            #log of the error
             if(do_print):
-                print "log error  = %g" % (0 if net_df < 1 else log(net_df))
+                print "relative error  = %g" % sqrt(net_df / net_f)
+                
 
             if(tsi != end - 1):
                 self.u.trajectory.next()

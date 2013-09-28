@@ -11,7 +11,7 @@ ctypedef np.float32_t FTYPE_t
 
 
 cdef class UniformMesh(object):
-    """Uniform mesh. 
+    """Uniform mesh. Right is not inclusive. Left is in construction.
     """
     cdef FTYPE_t l
     cdef FTYPE_t r

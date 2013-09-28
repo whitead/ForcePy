@@ -209,7 +209,6 @@ class ForceMatch:
                     self._plot_forces()
 
             #track error
-            net_f = 0
             net_df = 0
             self.force_match_calls += 1
 
@@ -217,10 +216,10 @@ class ForceMatch:
             for i in random.sample(range(self.u.atoms.numberOfAtoms()),self.u.atoms.numberOfAtoms()):
                 #calculate net forces deviation
                 df = np.array(ref_forces[i], dtype=np.float32)
-                net_f += ln.norm(df)
+                mag_temp = ln.norm(df)
                 for f in self.tar_forces:
                     df -= f.calc_particle_force(i,self.u)
-                net_df += ln.norm(df)
+                net_df +=  ln.norm(df) / mag_temp
 
                 #now run gradient update step on all the force types
                 for f in self.tar_forces:
@@ -240,7 +239,7 @@ class ForceMatch:
             ref_forces.fill(0)
             self._teardown()
 
-            print "relative error at %d  = %g" % (iterations, sqrt(net_df / net_f))
+            print "avg relative magnitude error at %d  = %g" % (iterations, net_df / self.u.atoms.numberOfAtoms())
             
             iterations -= 1
             if(iterations == 0):
@@ -272,7 +271,6 @@ class ForceMatch:
                 rf.calc_forces(ref_forces, self.u)            
 
             #track error
-            net_df = 0
             net_f = 0
             self.force_match_calls += 1
 
@@ -280,10 +278,10 @@ class ForceMatch:
             for i in random.sample(range(self.u.atoms.numberOfAtoms()),self.u.atoms.numberOfAtoms()):
                 #calculate net forces deviation
                 df = np.array(ref_forces[i], dtype=np.float32)
-                net_f += ln.norm(df)
+                mag_temp = ln.norm(df)
                 for f in self.tar_forces:
                     df -= f.calc_particle_force(i,self.u)
-                net_df += ln.norm(df)
+                net_df += ln.norm(df) / mag_temp
 
                 #now run gradient update step on all the force types
                 for f in self.tar_forces:
@@ -304,7 +302,7 @@ class ForceMatch:
             self._teardown()
 
             if(do_print):
-                print "relative error  = %g" % sqrt(net_df / net_f)
+                print "avg relative magnitude error  = %g" % net_df / self.u.atoms.numberOfAtoms()
                 
 
             if(tsi != end - 1):
@@ -866,7 +864,7 @@ class ForceMatch:
                         output.write(line)
 
         #now write a pdb, I've found that can come in handy
-        self.u.atoms.write("%s_start.pdb" % prefix, bonds='all')
+        #self.u.atoms.write("%s_start.pdb" % prefix, bonds='all')
         
         #now go back to original directory
         os.chdir(original_dir)

@@ -13,20 +13,20 @@ class Force(object):
 
        To be used in the stochastic gradient step, a force should implement all of the methods here
     """
-
-    def _setup_update_params(self, w_dim, initial_w=-500, eta=None):
+    
+    def _setup_update_params(self, w_dim, initial_w=-5000, eta=None, hard_pow=12):
         """ Assumes a line from given initial height down to zero. Basically repulsive force
         """
         self.eta = eta
         try:
             if(w_dim != len(initial_w)):
-                self.w = initial_w[0] * np.arange( w_dim - 1, -1, -1, dtype=np.float32 ) / w_dim
+                self.w = initial_w[0] * (np.power(np.arange( w_dim - 1, -1, -1 , dtype=np.float32),hard_pow) / np.float32(w_dim ** hard_pow))
             else:
                 self.w = np.copy(initial_w)
             if(eta is None):
                 self.eta = max(1, np.median(np.abs(initial_w)) * 2)
         except TypeError:
-            self.w = initial_w * np.arange( w_dim - 1, -1, -1 , dtype=np.float32) / w_dim
+            self.w = initial_w * (np.power(np.arange( w_dim - 1, -1, -1 , dtype=np.float32),hard_pow) / np.float32(w_dim ** hard_pow))
             if(eta is None):
                 self.eta = max(1, abs(initial_w) * 2)
 
@@ -261,7 +261,6 @@ class FileForce(Force):
     def calc_forces(self, forces, u):
         forces[:] = u.trajectory.ts._forces
 
-
     def clone_force(self):
         return FileForce()
 
@@ -342,6 +341,7 @@ class AnalyticForce(Force):
         positions = u.atoms.get_positions()
         nlist_accum = 0
         potential = 0
+        dims = u.trajectory.ts.dimensions
         for i in range(u.atoms.numberOfAtoms()):
             #check atom types
             if(self.mask1[i]):
@@ -354,7 +354,7 @@ class AnalyticForce(Force):
                 #do not double count
                 if(not maskj[j] or i < j):
                     continue
-                r = min_img_vec(positions[j], positions[i], u.trajectory.ts.dimensions, u.trajectory.periodic)
+                r = min_img_vec(positions[j], positions[i], dims, u.trajectory.periodic)
                 d = norm3(r)            
                 potential += self.call_potential(d,self.w)
             nlist_accum += self.category.nlist_lengths[i]
@@ -365,6 +365,7 @@ class AnalyticForce(Force):
         
         positions = u.atoms.get_positions()
         nlist_accum = 0
+        dims = u.trajectory.ts.dimensions
         for i in range(u.atoms.numberOfAtoms()):
             #check atom types
             if(self.mask1[i]):
@@ -376,7 +377,7 @@ class AnalyticForce(Force):
             for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
                 if(not maskj[j]):
                     continue
-                r = min_img_vec(positions[j], positions[i], u.trajectory.ts.dimensions, u.trajectory.periodic)
+                r = min_img_vec(positions[j], positions[i], dims, u.trajectory.periodic)
                 d = norm3(r)
                 forces[i] += self.call_force(d,self.w) * (r / d)
             nlist_accum += self.category.nlist_lengths[i]
@@ -396,11 +397,12 @@ class AnalyticForce(Force):
 
         positions = u.atoms.get_positions()
         nlist_accum = np.sum(self.category.nlist_lengths[:i]) if i > 0  else 0
+        dims = u.trajectory.ts.dimensions
 
         for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
             if(not self.mask2[j]):
                 continue
-            r = min_img_vec(positions[j], positions[i], u.trajectory.ts.dimensions, u.trajectory.periodic)
+            r = min_img_vec(positions[j], positions[i], dims, u.trajectory.periodic)
             d = norm3(r)
             r = r / d            
             self.temp_force += self.call_force(d, self.w) * r
@@ -590,6 +592,7 @@ class SpectralForce(Force):
         positions = u.atoms.get_positions()
         nlist_accum = 0        
         potential = 0
+        dims = u.trajectory.ts.dimensions
         self.temp_grad.fill(0)
         for i in range(u.atoms.numberOfAtoms()):
             #check to if this is a valid type
@@ -603,7 +606,7 @@ class SpectralForce(Force):
                 #do not doulbe count for calculating potential!
                 if(not maskj[i] or i < j):
                     continue
-                r = min_img_vec(positions[j], positions[i], u.trajectory.ts.dimensions, u.trajectory.periodic)
+                r = min_img_vec(positions[j], positions[i], dims, u.trajectory.periodic)
                 d = norm3(r)
                 temp = self.basis.potential(d, self.mesh)
                 potential += self.w.dot(temp)
@@ -615,6 +618,7 @@ class SpectralForce(Force):
     def calc_forces(self, forces, u):        
         positions = u.atoms.get_positions()
         nlist_accum = 0        
+        dims = u.trajectory.ts.dimensions
         for i in range(u.atoms.numberOfAtoms()):
             #check to if this is a valid type
             if(self.mask1[i]):
@@ -626,7 +630,7 @@ class SpectralForce(Force):
             for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
                 if(not maskj[i]):
                     continue
-                r = min_img_vec(positions[j], positions[i], u.trajectory.ts.dimensions, u.trajectory.periodic)
+                r = min_img_vec(positions[j], positions[i], dims, u.trajectory.periodic)
                 d = norm3(r)
                 force = self.w.dot(self.basis.force(d, self.mesh)) * (r / d)
                 forces[i] += force
@@ -635,7 +639,7 @@ class SpectralForce(Force):
     def calc_particle_force(self, i, u):
         """
         This is the most called function, so I've tried a few approaches to improve speed.
-        The waeve was the fastest, but least portable. Now I'm using a tuned cython function
+        The weave was the fastest, but least portable. Now I'm using a tuned cython function
         for the most intensive calculation which is defined in Util.pyx
         """
 
@@ -651,7 +655,6 @@ class SpectralForce(Force):
         else:
             return self.temp_force
 
-
         positions = u.atoms.get_positions()
         nlist_accum = np.sum(self.category.nlist_lengths[:i]) if i > 0  else 0
 
@@ -662,11 +665,12 @@ class SpectralForce(Force):
 #        force = self.temp_force
 
         temp = np.empty( len(self.w) , dtype=np.float32)
+        dims = u.trajectory.ts.dimensions
         for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
             
             if(not maskj[j]):
                 continue
-            r = min_img_vec(positions[j], positions[i], u.trajectory.ts.dimensions, u.trajectory.periodic)
+            r = min_img_vec(positions[j], positions[i], dims, u.trajectory.periodic)
             d = norm3(r)
             r = r / d
             self.basis.force_cache(d, temp, self.mesh)

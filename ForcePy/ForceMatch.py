@@ -93,7 +93,7 @@ class ForceMatch:
         odict['structure_filename'] = self.u.filename
         odict['trajectory_filename'] = self.u.trajectory.filename
         odict['mass_map'] = create_mass_map(self.u)
-        
+        odict['trajectory_is_periodic'] = self.u.trajectory.periodic
 
         return odict
         
@@ -102,6 +102,8 @@ class ForceMatch:
         #reconstruct the universe
         self.u = Universe(dict['structure_filename'], dict['trajectory_filename'])
         apply_mass_map(self.u, dict['mass_map'])
+        self.u.trajectory.periodic = dict['trajectory_is_periodic']
+
         
 
     def add_tar_force(self, *forces):
@@ -130,7 +132,7 @@ class ForceMatch:
             for f in self.tar_forces:
                 self.cache[f] = np.copy(f.lip)
                                 
-    def force_match_mpi(self, batch_size = None, do_plots = False, repeats = 1):
+    def force_match_mpi(self, batch_size = None, do_plots = False, repeats = 1, quiet=False):
         
         if(not mpi_support):
             raise mpi_error
@@ -147,14 +149,14 @@ class ForceMatch:
             index = 0
             while(index * size * batch_size < self.u.trajectory.numframes * repeats):
                 try:
-                    self._distribute_tasks(batch_size, index * batch_size)
+                    self._distribute_tasks(batch_size, index * batch_size, quiet=quiet)
                 except (EOFError, IOError):
                     #just finished reading the file, eat the exception. Will be rewound in force_match_task
                     pass
 
                 self._reduce_tasks()
                 index +=1
-                if(rank == 0):
+                if(rank == 0 and not quiet):
                     print "%d / %d iterations" % (index * size * batch_size, self.u.trajectory.numframes * repeats)  
                     if(do_plots):                    
                         self._plot_forces()
@@ -162,13 +164,13 @@ class ForceMatch:
         else:
             for i in range(repeats):
                 try:
-                    self._distribute_tasks()
+                    self._distribute_tasks(quiet=quiet)
                 except (EOFError, IOError):
                     #just finished reading the file, eat the exception. Will be rewound in force_match_task
                     pass
                     
                 self._reduce_tasks()
-                if(rank == 0):
+                if(rank == 0 and not quiet):
                     print "%d / %d iterations" % (i+1, repeats)  
                     if(do_plots):                    
                         self._plot_forces()
@@ -178,7 +180,7 @@ class ForceMatch:
         
 
     def force_match(self, iterations = 0):
-        
+
         if(iterations == 0):
             iterations = self.u.trajectory.numframes
         
@@ -204,9 +206,9 @@ class ForceMatch:
             for rf in self.ref_forces:
                 rf.calc_forces(ref_forces, self.u)            
 
-                #make plots
-                if(self.plot_frequency != -1 and iterations % self.plot_frequency == 0):
-                    self._plot_forces()
+            #make plots
+            if(self.plot_frequency != -1 and iterations % self.plot_frequency == 0):
+                self._plot_forces()
 
             #track error
             net_df = 0
@@ -214,17 +216,17 @@ class ForceMatch:
 
             #sample particles and run updates on them 
             for i in random.sample(range(self.u.atoms.numberOfAtoms()),self.u.atoms.numberOfAtoms()):
+
                 #calculate net forces deviation
                 df = np.array(ref_forces[i], dtype=np.float32)
                 mag_temp = ln.norm(df)
                 for f in self.tar_forces:
-                    df -= f.calc_particle_force(i,self.u)
+                    df -= f.calc_particle_force(i,self.u)                    
                 net_df +=  ln.norm(df) / mag_temp
 
                 #now run gradient update step on all the force types
                 for f in self.tar_forces:
-                    negative_grad = f.w_grad
-                    negative_grad.fill(0)
+                    negative_grad = f.w_grad #not actually negative yet. The negative sign is in the df
                     np.dot(f.temp_grad, df, negative_grad)
 
                     #apply any regularization
@@ -250,6 +252,7 @@ class ForceMatch:
 
     def _force_match_task(self, start, end, do_print = False):
         ref_forces = np.zeros( (self.u.atoms.numberOfAtoms(), 3) )
+
         
         self.u.trajectory.rewind()
         for i in range(start):
@@ -271,7 +274,7 @@ class ForceMatch:
                 rf.calc_forces(ref_forces, self.u)            
 
             #track error
-            net_f = 0
+            net_df = 0            
             self.force_match_calls += 1
 
             #sample particles and run updates on them 
@@ -285,8 +288,7 @@ class ForceMatch:
 
                 #now run gradient update step on all the force types
                 for f in self.tar_forces:
-                    negative_grad = f.w_grad
-                    negative_grad.fill(0)
+                    negative_grad = f.w_grad #not actually negative yet. The negative sign is in the df
                     np.dot(f.temp_grad, df, negative_grad)
 
                     #apply any regularization
@@ -302,7 +304,7 @@ class ForceMatch:
             self._teardown()
 
             if(do_print):
-                print "avg relative magnitude error  = %g" % net_df / self.u.atoms.numberOfAtoms()
+                print "avg relative magnitude error  = %g" % (net_df / self.u.atoms.numberOfAtoms())
                 
 
             if(tsi != end - 1):
@@ -351,7 +353,7 @@ class ForceMatch:
         
         self._unpack_tar_forces()
 
-    def _distribute_tasks(self, batch_size = None, offset = 0):
+    def _distribute_tasks(self, batch_size = None, offset = 0, quiet=False):
         comm = MPI.COMM_WORLD
         size = comm.Get_size()
         rank = comm.Get_rank()
@@ -362,13 +364,13 @@ class ForceMatch:
 
         if(batch_size):
             #use batch size
-            self._force_match_task(spanr / 2 + rank * span + offset, spanr / 2 + rank * span + batch_size + offset, rank == 0)
+            self._force_match_task(spanr / 2 + rank * span + offset, spanr / 2 + rank * span + batch_size + offset, rank == 0 and not quiet)
         else:
             #distribute equally on the trajectory
             if(rank < spanr):
-                self._force_match_task(rank * (span + 1), (rank + 1) * (span + 1), rank == 0)
+                self._force_match_task(rank * (span + 1), (rank + 1) * (span + 1), rank == 0 and not quiet)
             else:
-                self._force_match_task(rank * span + spanr, (rank + 1) * span + spanr, rank == 0)
+                self._force_match_task(rank * span + spanr, (rank + 1) * span + spanr, rank == 0 and not quiet)
         
     def observation_match(self, obs_sweeps = 25, obs_samples = None, reject_tol = None):
         """ Match observations

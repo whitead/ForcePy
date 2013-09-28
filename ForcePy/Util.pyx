@@ -48,7 +48,7 @@ cpdef FTYPE_t min_img_dist_sq(np.ndarray[FTYPE_t, ndim=1] x, np.ndarray[FTYPE_t,
         dx = x[i] - y[i]        
         if(periodic):
             dx -= cround(dx / img[i]) * img[i]
-        dist += dx
+        dist += dx * dx
     return dist
 
 def min_img_dist(np.ndarray[FTYPE_t, ndim=1] x, np.ndarray[FTYPE_t, ndim=1] y, np.ndarray[FTYPE_t, ndim=1] img, bint periodic=True):
@@ -61,7 +61,6 @@ cpdef double norm3(np.ndarray[FTYPE_t, ndim=1] x):
 def spec_force_inner_loop(np.ndarray[FTYPE_t, ndim=1] w, np.ndarray[FTYPE_t, ndim=1] basis_out, 
                           np.ndarray[FTYPE_t, ndim=2] grad, np.ndarray[FTYPE_t, ndim=1] force, 
                           np.ndarray[FTYPE_t, ndim=1] r):
-    cdef FTYPE_t value
     for i in range(w.shape[0]):
         for j in range(r.shape[0]):
             force[j] = force[j] + w[i] * basis_out[i] * r[j]

@@ -31,6 +31,8 @@ class UnitStep(object):
     @staticmethod
     def force_cache(FTYPE_t x, np.ndarray[FTYPE_t, ndim=1] cache, mesh):    
         cache.fill(0)
+        i = mesh.mesh_index(x)
+        assert i < len(mesh), "Attempted calculation outside of mesh. {} is beyond [{},{}]. Index = {} ( > {})".format(x, mesh.min(), mesh.max(), i, len(mesh))
         cache[mesh.mesh_index(x)] = 1                        
 
     @staticmethod

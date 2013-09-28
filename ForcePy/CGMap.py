@@ -155,6 +155,7 @@ class CGUniverse(Universe):
         write_structure(self, structure, bonds='all')
         write_trajectory(self, trajectory)        
         u = Universe(structure, trajectory)
+        u.trajectory.periodic = self.trajectory.periodic
         apply_mass_map(u, create_mass_map(self))
         return u
     
@@ -191,9 +192,9 @@ class CGReader(base.Reader):
         self.ts = Timestep(self.numatoms)
         self.ts.set_ref_traj(aatraj)
         self.ts.dimensions = aatraj.ts.dimensions
-        self.ts._pos = None
-        self.ts._velocities = None
-        self.ts._forces = None
+        self.ts._pos = np.empty((self.numatoms,3), dtype=np.float32)
+        self.ts._velocities = np.copy(self.ts._pos)
+        self.ts._forces = np.copy(self.ts._pos)
         self._read_next_timestep(ts=aatraj.ts)
         
     def close(self):
@@ -225,30 +226,32 @@ class CGReader(base.Reader):
                                             
         self.ts._pos = self.top_map.dot( ts._pos )
         try:
-            self.ts._velocities = self.top_map.dot( ts._velocities ) #COM motion
+            self.ts._velocities[:] = self.top_map.dot( ts._velocities ) #COM motion
         except AttributeError:
-            self.ts._velocities = np.zeros( (self.numatoms, 3) ,dtype=np.float32)
-        try:
-            self.ts._forces = self.force_map.dot( ts._forces )
-        except AttributeError:
-            #check to see if we have a lammps force dump
-            if(self.lfdump):
-                #we do, let's read it
-                ts._forces = np.zeros( (np.shape(self.top_map)[1], 3), dtype=np.float32)
-                while(not self.lfdump.readline().startswith('ITEM: ATOMS')):
-                    pass
-                for i in range(len(ts._forces)):
-                    sline = self.lfdump.readline().split()
+            self.ts._velocities[:] = np.zeros( (self.numatoms, 3) ,dtype=np.float32)
+
+        #check to see if we have a lammps force dump for forces
+        if(self.lfdump):
+            #we do, let's read it
+            forces = np.zeros( (np.shape(self.top_map)[1], 3), dtype=np.float32)
+            while(not self.lfdump.readline().startswith('ITEM: ATOMS')):
+                pass
+            for i in range(len(forces)):
+                sline = self.lfdump.readline().split()
                     #NOTE NOTE NOTE NOTE: Lammps forces seem to be negative of what I use.
-                    try:
-                        ts._forces[int(sline[0]) - 1,:] = [-float(x) for x in sline[1:]]
-                    except ValueError:
-                        raise IOError( "Invalid forces line at %s" % reduce(lambda x,y: x + " " + y, sline))
-                self.ts._forces = self.force_map.dot( ts._forces) 
+                try:
+                    forces[int(sline[0]) - 1,:] = [-float(x) for x in sline[1:]]                        
+                except ValueError:
+                    raise IOError( "Invalid forces line at %s" % reduce(lambda x,y: x + " " + y, sline))
+            self.ts._forces[:] = self.force_map.dot( forces) 
+        else:
+            try:
+                self.ts._forces[:] = self.force_map.dot( ts._forces )
+            except AttributeError:
+                #can't find any forces, use 0
+                self.ts._forces[:] = np.zeros( (self.numatoms, 3) ,dtype=np.float32)
 
-            else: #if not, then use 0
-                self.ts._forces = np.zeros( (self.numatoms, 3) ,dtype=np.float32)
-
+        print forces[5434,:]
         return self.ts
 
     def rewind(self):

@@ -28,8 +28,8 @@ cdef FTYPE_t min_img_dist_sq(np.ndarray[FTYPE_t, ndim=1] x, np.ndarray[FTYPE_t, 
     for i in range(3):
         dx = x[i] - y[i]        
         if(periodic):
-            dx -= cround(dx / img[i])
-        dist += dx
+            dx -= cround(dx / img[i]) * img[i]
+        dist += dx * dx
     return dist
 
 

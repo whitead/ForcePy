@@ -34,8 +34,7 @@ cdef class UniformMesh(object):
     cpdef int mesh_index(self, FTYPE_t x):
         #I'm having trouble deciding to permit things past the boundary from working or not
         assert x >= self.l and x < self.r, "Mesh point is not within mesh"
-        return int(floor( (x - self.l) / self.__dx))
-        #return max(0, min(self.length - 1, int(floor( (x - self.l) / self.__dx) )))
+        return max(0, min(self.length - 1, int(floor( (x - self.l) / self.__dx) )))
 
     def __len__(self):
         return self.length

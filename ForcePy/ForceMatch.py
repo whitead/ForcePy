@@ -140,6 +140,9 @@ class ForceMatch:
         comm = MPI.COMM_WORLD
         size = comm.Get_size()
         rank = comm.Get_rank()
+        
+        if(size == 1):
+            raise RuntimeError("MPI should not be run on a single process. Call force_match instead")
 
         if(do_plots and rank == 0):
             self._setup_plot()

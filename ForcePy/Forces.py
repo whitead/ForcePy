@@ -481,7 +481,7 @@ class FixedHarmonicForce(AnalyticForce):
         
 
     def clone_force(self):
-        copy = FixedHarmonicForce(self.category.__class__, self.k, self.x0, self.cutoff)
+        copy = FixedHarmonicForce(self.category.__class__, k=self.k, x0=self.x0, x0_guess=self.w[1])
         return copy    
 
     def calc_particle_force(self, i, u):
@@ -495,6 +495,15 @@ class FixedHarmonicForce(AnalyticForce):
         if(self.x0 is None):
             return [0,-(d - w[1])]
         return [0,0]
+
+    @property
+    def mind(self):
+        return 0.01
+
+    @property
+    def maxd(self):
+        return self.w[1] * 2
+
 
 class Regularizer:
     """grad_fxn: takes in vector returns gradient vector

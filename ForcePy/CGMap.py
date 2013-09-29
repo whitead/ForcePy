@@ -251,7 +251,6 @@ class CGReader(base.Reader):
                 #can't find any forces, use 0
                 self.ts._forces[:] = np.zeros( (self.numatoms, 3) ,dtype=np.float32)
 
-        print forces[5434,:]
         return self.ts
 
     def rewind(self):

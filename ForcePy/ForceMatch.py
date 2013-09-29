@@ -229,17 +229,7 @@ class ForceMatch:
 
                 #now run gradient update step on all the force types
                 for f in self.tar_forces:
-                    negative_grad = f.w_grad #not actually negative yet. The negative sign is in the df
-                    np.dot(f.temp_grad, df, negative_grad)
-
-                    #apply any regularization
-                    for r in f.regularization:
-                        negative_grad -= r[0](f.w)
-                    f.lip +=  np.square(negative_grad)
-
-                    #we should be taking the negative of the dot product
-                    #but its easier to put the minus sign in this expression
-                    f.w = f.w + f.eta / np.sqrt(f.lip) * negative_grad
+                    f.update(df)
 
             ref_forces.fill(0)
             self._teardown()
@@ -291,17 +281,7 @@ class ForceMatch:
 
                 #now run gradient update step on all the force types
                 for f in self.tar_forces:
-                    negative_grad = f.w_grad #not actually negative yet. The negative sign is in the df
-                    np.dot(f.temp_grad, df, negative_grad)
-
-                    #apply any regularization
-                    for r in f.regularization:
-                        negative_grad -= r[0](f.w)
-                    f.lip +=  np.square(negative_grad)
-
-                    #we should be taking the negative of the dot product
-                    #but its easier to put the minus sign in this expression
-                    f.w = f.w + f.eta / np.sqrt(f.lip) * negative_grad
+                    f.update(df)
 
             ref_forces.fill(0)
             self._teardown()

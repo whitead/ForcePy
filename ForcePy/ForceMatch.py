@@ -849,10 +849,11 @@ class ForceMatch:
                         output.write(line)
 
         #now write a pdb, I've found that can come in handy
-        try:
+        try:            
             self.u.atoms.write("%s_start.pdb" % prefix, bonds='all')
-        except:
-            pass
+        except Exception as e:
+            print "Failed to write start PDB ", e
+
         
         #now go back to original directory
         os.chdir(original_dir)

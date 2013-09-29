@@ -1,5 +1,6 @@
 from ForcePy.NeighborList import NeighborList
 import numpy as np
+from ForcePy.Util import norm3, min_img_vec
 
 class ForceCategory(object):
     """A category of force/potential type.
@@ -9,8 +10,29 @@ class ForceCategory(object):
     matching code. Examples of categories are pairwise forces,
    threebody forces, topology forces (bonds, angles, etc).
    """
-    pass
 
+    def __init__(self):
+        self.nlist_ready = False
+
+    def generate_nlist(self, i):
+        assert self.nlist_ready, "Neighbor list not built yet"
+        nlist_accum = np.sum(self.nlist_lengths[:i]) if i > 0  else 0
+        for j in self.nlist[nlist_accum:(nlist_accum + self.nlist_lengths[i])]:
+            yield j
+
+    def generate_neighbor_vecs(self, i, u, mask = None):
+        positions = u.atoms.get_positions()
+        dims = u.trajectory.ts.dimensions
+
+        for j in self.generate_nlist(i):
+            if(mask and not mask[j]):
+                continue
+            r = min_img_vec(positions[j], positions[i], dims, u.trajectory.periodic)
+            d = norm3(r)
+            r = r / d
+            yield (r,d,j)
+
+        
 
 class Angle(ForceCategory):
     pass
@@ -40,7 +62,6 @@ class Pairwise(ForceCategory):
         super(Pairwise, self).__init__()
         self.cutoff = cutoff                    
         self.forces = []
-        self.nlist_ready = False
         self.nlist_obj = None
 
     def _build_nlist(self, u):
@@ -66,7 +87,6 @@ class Pairwise(ForceCategory):
 
     def pair_exists(self, u, type1, type2):
         return True
-
     
 class Bond(ForceCategory):
 
@@ -82,33 +102,32 @@ class Bond(ForceCategory):
     
     def __init__(self):
         super(Bond, self).__init__()
-        self.blist_ready = False
     
 
-    def _build_blist(self, u):
+    def _build_nlist(self, u):
         temp = [[] for x in range(u.atoms.numberOfAtoms())]
         #could be at most everything bonded with everything
-        self.blist = np.empty((u.atoms.numberOfAtoms() - 1) * (u.atoms.numberOfAtoms() / 2), dtype=np.int32)
-        self.blist_lengths = np.empty(u.atoms.numberOfAtoms(), dtype=np.int32)
-        blist_accum = 0
+        self.nlist = np.empty((u.atoms.numberOfAtoms() - 1) * (u.atoms.numberOfAtoms() / 2), dtype=np.int32)
+        self.nlist_lengths = np.empty(u.atoms.numberOfAtoms(), dtype=np.int32)
+        nlist_accum = 0
         for b in u.bonds:
             temp[b.atom1.number].append(b.atom2.number)
             temp[b.atom2.number].append(b.atom1.number)
 
         #unwrap the bond list to make it look like neighbor lists
         for i,bl in zip(range(u.atoms.numberOfAtoms()), temp):
-            self.blist_lengths[i] = len(temp[i])
+            self.nlist_lengths[i] = len(temp[i])
             for b in bl:
-                self.blist[blist_accum] = b
-                blist_accum += 1
+                self.nlist[nlist_accum] = b
+                nlist_accum += 1
 
         #resize now we know how many bond items there are
-        self.blist = self.blist[:blist_accum]
-        self.blist_ready = True
+        self.nlist = self.nlist[:nlist_accum]
+        self.nlist_ready = True
 
     def _setup(self, u):
-        if(not self.blist_ready):
-            self._build_blist(u)
+        if(not self.nlist_ready):
+            self._build_nlist(u)
 
     def _teardown(self):
         self.nlist_ready = False
@@ -119,25 +138,17 @@ class Bond(ForceCategory):
     def _teardown_update(self):
         self._teardown()
 
-    @property
-    def nlist(self):
-        return self.blist
-
-    @property
-    def nlist_lengths(self):
-        return self.blist_lengths
-
     def pair_exists(self, u, type1, type2):
         """Check to see if a there exist any pairs of the two types given
         """
-        if(not self.blist_ready):
-            self._build_blist(u)        
+        if(not self.nlist_ready):
+            self._build_nlist(u)        
 
         sel2 = u.atoms.selectAtoms(type2)        
         for a in u.atoms.selectAtoms(type1):
             i = a.number
-            blist_accum = np.sum(self.blist_lengths[:i]) if i > 0  else 0
-            for j in self.blist[blist_accum:(blist_accum + self.blist_lengths[i])]:
+            nlist_accum = np.sum(self.nlist_lengths[:i]) if i > 0  else 0
+            for j in self.nlist[nlist_accum:(nlist_accum + self.nlist_lengths[i])]:
                 if(u.atoms[int(j)] in sel2):
                     return True
 

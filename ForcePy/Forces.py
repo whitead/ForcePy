@@ -38,6 +38,20 @@ class Force(object):
         self.sel1 = None
         self.sel2 = None
 
+    def update(self, df):
+        negative_grad = self.w_grad #not actually negative yet. The negative sign is in the df
+        np.dot(self.temp_grad, df, negative_grad)
+        
+        #apply any regularization
+        for r in self.regularization:
+            negative_grad -= r[0](self.w)
+        self.lip +=  np.square(negative_grad)
+
+        #we should be taking the negative of the dot product
+        #but its easier to put the minus sign in this expression
+        self.w = self.w + self.eta / np.sqrt(self.lip) * negative_grad
+
+
     #In case the force needs access to the universe for setting up, override (and call this method).
     def setup_hook(self, u):
         try:
@@ -350,12 +364,10 @@ class AnalyticForce(Force):
                 maskj = self.mask1
             else:
                 continue
-            for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
+            for r,d,j in self.category.generate_neighbor_vecs(i, u, self.mask2):
                 #do not double count
-                if(not maskj[j] or i < j):
+                if(i < j):
                     continue
-                r = min_img_vec(positions[j], positions[i], dims, u.trajectory.periodic)
-                d = norm3(r)            
                 potential += self.call_potential(d,self.w)
             nlist_accum += self.category.nlist_lengths[i]
         return potential
@@ -374,11 +386,7 @@ class AnalyticForce(Force):
                 maskj = self.mask1
             else:
                 continue
-            for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
-                if(not maskj[j]):
-                    continue
-                r = min_img_vec(positions[j], positions[i], dims, u.trajectory.periodic)
-                d = norm3(r)
+            for r,d,j in self.category.generate_neighbor_vecs(i, u, self.mask2):
                 forces[i] += self.call_force(d,self.w) * (r / d)
             nlist_accum += self.category.nlist_lengths[i]
 
@@ -395,16 +403,7 @@ class AnalyticForce(Force):
         else:
             return self.temp_force
 
-        positions = u.atoms.get_positions()
-        nlist_accum = np.sum(self.category.nlist_lengths[:i]) if i > 0  else 0
-        dims = u.trajectory.ts.dimensions
-
-        for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
-            if(not self.mask2[j]):
-                continue
-            r = min_img_vec(positions[j], positions[i], dims, u.trajectory.periodic)
-            d = norm3(r)
-            r = r / d            
+        for r,d,j in self.category.generate_neighbor_vecs(i, u, self.mask2):
             self.temp_force += self.call_force(d, self.w) * r
             f_grad = self.call_grad(d, self.w)            
             self.temp_grad +=  np.outer(f_grad, r)
@@ -465,12 +464,15 @@ class HarmonicForce(AnalyticForce):
         return w[0] * (d - w[1]) ** 2
 
 class FixedHarmonicForce(AnalyticForce):
-    """This is meant for bonds which are fixed in the trajectory.
-       The spring constant is set, but the equilibrium distance may 
-       optimized if it's not set in the constructor
+    """This is meant for bonds which are fixed in the trajectory.  The
+       spring constant is set, but the equilibrium distance may
+       optimized if it's not set in the constructor. Do not use this
+       for movable bonds in a trajectory, since it will not register
+       forces
     """
     def __init__(self, category, k, x0=None, x0_guess=None):
         super(FixedHarmonicForce, self).__init__(category, HarmonicForce.force, self.grad, 2, None, HarmonicForce.potential)
+        self.w_grad.fill(0) #we might not update and want it correct
         self.k = k
         self.x0 = x0
         self.w[0] = k
@@ -485,16 +487,23 @@ class FixedHarmonicForce(AnalyticForce):
         return copy    
 
     def calc_particle_force(self, i, u):
-        self.w[0] = 0
-        result = super(FixedHarmonicForce, self).calc_particle_force(i, u)
-        self.w[0] = self.k
-        return result
+        self.temp_force.fill(0)
+        
+        for r,d,j in self.category.generate_neighbor_vecs(i, u, self.mask2):
+            self.w_grad[1] += -(d - self.w[1])
+
+        return self.temp_force
 
         
     def grad(self, d, w):
-        if(self.x0 is None):
-            return [0,-(d - w[1])]
         return [0,0]
+
+    def update(self, df):
+        #slightly modified
+        self.lip +=  np.square(self.w_grad)
+        self.w = self.w - self.eta / np.sqrt(self.lip) * self.w_grad
+        self.w_grad.fill(0)
+
 
     @property
     def mind(self):
@@ -611,12 +620,9 @@ class SpectralForce(Force):
                 maskj = self.mask1
             else:
                 continue
-            for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
-                #do not doulbe count for calculating potential!
-                if(not maskj[i] or i < j):
+            for r,d,j in self.category.generate_neighbor_vecs(i, u, self.mask2):
+                if( i < j):
                     continue
-                r = min_img_vec(positions[j], positions[i], dims, u.trajectory.periodic)
-                d = norm3(r)
                 temp = self.basis.potential(d, self.mesh)
                 potential += self.w.dot(temp)
                 self.temp_grad[:,1] += temp
@@ -636,11 +642,7 @@ class SpectralForce(Force):
                 maskj = self.mask1
             else:
                 continue
-            for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
-                if(not maskj[i]):
-                    continue
-                r = min_img_vec(positions[j], positions[i], dims, u.trajectory.periodic)
-                d = norm3(r)
+            for r,d,j in self.category.generate_neighbor_vecs(i, u, self.mask2):
                 force = self.w.dot(self.basis.force(d, self.mesh)) * (r / d)
                 forces[i] += force
             nlist_accum += self.category.nlist_lengths[i]
@@ -675,13 +677,7 @@ class SpectralForce(Force):
 
         temp = np.empty( len(self.w) , dtype=np.float32)
         dims = u.trajectory.ts.dimensions
-        for j in self.category.nlist[nlist_accum:(nlist_accum + self.category.nlist_lengths[i])]:
-            
-            if(not maskj[j]):
-                continue
-            r = min_img_vec(positions[j], positions[i], dims, u.trajectory.periodic)
-            d = norm3(r)
-            r = r / d
+        for r,d,j in self.category.generate_neighbor_vecs(i, u, self.mask2):
             self.basis.force_cache(d, temp, self.mesh)
             #tuned cython funciton
             spec_force_inner_loop(self.w, temp, self.temp_grad, self.temp_force, r)

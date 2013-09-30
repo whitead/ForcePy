@@ -14,7 +14,7 @@ class Force(object):
        To be used in the stochastic gradient step, a force should implement all of the methods here
     """
     
-    def _setup_update_params(self, w_dim, initial_w=-5000, eta=None, hard_pow=12):
+    def _setup_update_params(self, w_dim, initial_w=-500, eta=None, hard_pow=12):
         """ Assumes a line from given initial height down to zero. Basically repulsive force
         """
         self.eta = eta
@@ -192,7 +192,7 @@ class Force(object):
 
 
 
-    def write_lammps_table(self, outfile, force_conv=1., energy_conv=1., dist_conv=1., points=1000):
+    def write_lammps_table(self, outfile, force_conv=1., energy_conv=1., dist_conv=1., points=10000):
         import os
         """Write the current forcefield to the given outfile.
         """

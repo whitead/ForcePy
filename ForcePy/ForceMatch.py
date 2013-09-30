@@ -689,7 +689,7 @@ class ForceMatch:
         return type_count
 
         
-    def write_lammps_scripts(self, prefix='cg', folder = os.curdir, lammps_units="real", table_points=1000, lammps_input_file=None):
+    def write_lammps_scripts(self, prefix='cg', folder = os.curdir, lammps_units="real", table_points=10000, lammps_input_file=None, force_conversion = -1.0, energy_conversion=None):
         """Using the given ForceMatch and Universe object, this will create a set of input files for Lammps.
     
         The function will create the given folder and put all files
@@ -710,8 +710,8 @@ class ForceMatch:
  
         #write force tables
         force_info = self.write_lammps_tables('%s_force' % prefix, 
-                                        force_conv = -0.278,
-                                        energy_conv = 0.278,
+                                        force_conv = force_conversion,
+                                        energy_conv = energy_conversion if energy_conversion else -force_conversion,
                                         dist_conv = 1,
                                         points=table_points)
 

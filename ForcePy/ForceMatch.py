@@ -132,7 +132,7 @@ class ForceMatch:
             for f in self.tar_forces:
                 self.cache[f] = np.copy(f.lip)
                                 
-    def force_match_mpi(self, batch_size = None, do_plots = False, repeats = 1, quiet=False):
+    def force_match_mpi(self, batch_size = None, do_plots = False, repeats = 1, frame_number=0, quiet=False):
         
         if(not mpi_support):
             raise mpi_error
@@ -147,12 +147,14 @@ class ForceMatch:
         if(do_plots and rank == 0):
             self._setup_plot()
 
+        frame_number = frame_number if frame_number = 0 else self.u.trajectory.numframes
+
 
         if(batch_size):
             index = 0
-            while(index * size * batch_size < self.u.trajectory.numframes * repeats):
+            while(index * size * batch_size < frame_number * repeats):
                 try:
-                    self._distribute_tasks(batch_size, index * batch_size, quiet=quiet)
+                    self._distribute_tasks(batch_size, index * batch_size, quiet=quiet, frame_number=frame_number)
                 except (EOFError, IOError):
                     #just finished reading the file, eat the exception. Will be rewound in force_match_task
                     pass
@@ -160,14 +162,14 @@ class ForceMatch:
                 self._reduce_tasks()
                 index +=1
                 if(rank == 0 and not quiet):
-                    print "%d / %d iterations" % (index * size * batch_size, self.u.trajectory.numframes * repeats)  
+                    print "%d / %d iterations" % (index * size * batch_size, frame_number * repeats)  
                     if(do_plots):                    
                         self._plot_forces()
 
         else:
             for i in range(repeats):
                 try:
-                    self._distribute_tasks(quiet=quiet)
+                    self._distribute_tasks(quiet=quiet, frame_number=frame_number)
                 except (EOFError, IOError):
                     #just finished reading the file, eat the exception. Will be rewound in force_match_task
                     pass
@@ -336,14 +338,16 @@ class ForceMatch:
         
         self._unpack_tar_forces()
 
-    def _distribute_tasks(self, batch_size = None, offset = 0, quiet=False):
+    def _distribute_tasks(self, batch_size = None, offset = 0, quiet=False, frame_number = 0):
         comm = MPI.COMM_WORLD
         size = comm.Get_size()
         rank = comm.Get_rank()
-        span = self.u.trajectory.numframes / size
+
+        frame_number = frame_number if frame_number = 0 else self.u.trajectory.numframes
+        span = frame_number / size
         
         #get remainder
-        spanr = self.u.trajectory.numframes - size * span
+        spanr = frame_number - size * span
 
         if(batch_size):
             #use batch size

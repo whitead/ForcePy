@@ -147,7 +147,7 @@ class ForceMatch:
         if(do_plots and rank == 0):
             self._setup_plot()
 
-        frame_number = frame_number if frame_number = 0 else self.u.trajectory.numframes
+        frame_number = frame_number if frame_number == 0 else self.u.trajectory.numframes
 
 
         if(batch_size):
@@ -343,7 +343,7 @@ class ForceMatch:
         size = comm.Get_size()
         rank = comm.Get_rank()
 
-        frame_number = frame_number if frame_number = 0 else self.u.trajectory.numframes
+        frame_number = frame_number if frame_number == 0 else self.u.trajectory.numframes
         span = frame_number / size
         
         #get remainder

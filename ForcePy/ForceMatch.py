@@ -147,7 +147,7 @@ class ForceMatch:
         if(do_plots and rank == 0):
             self._setup_plot()
 
-        frame_number = frame_number if frame_number == 0 else self.u.trajectory.numframes
+        frame_number = frame_number if frame_number > 0 else self.u.trajectory.numframes
 
 
         if(batch_size):
@@ -171,7 +171,7 @@ class ForceMatch:
                 try:
                     self._distribute_tasks(quiet=quiet, frame_number=frame_number)
                 except (EOFError, IOError):
-                    #just finished reading the file, eat the exception. Will be rewound in force_match_task
+                    #just finished reading the file, eat the exception. Will be rewound in force_match_task                    
                     pass
                     
                 self._reduce_tasks()
@@ -343,7 +343,7 @@ class ForceMatch:
         size = comm.Get_size()
         rank = comm.Get_rank()
 
-        frame_number = frame_number if frame_number == 0 else self.u.trajectory.numframes
+        frame_number = frame_number if frame_number > 0 else self.u.trajectory.numframes
         span = frame_number / size
         
         #get remainder

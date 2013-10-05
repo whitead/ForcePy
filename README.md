@@ -159,6 +159,7 @@ more coarse models
 
 3-Beads per residue
 -----------
+
 ```python
 from MDAnalysis import Universe
 from ForcePy import *

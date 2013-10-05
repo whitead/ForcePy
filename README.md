@@ -157,7 +157,7 @@ Example 2: Coarse-graining a Protein
 Here are some examples of coarse-graining a protein with increasingly
 more coarse models
 
-3-Beads per residue
+3-Beads per Residue
 -----------
 
 ```python
@@ -178,7 +178,7 @@ write_structure(cgu_1, 'cg_1.pdb', bonds='all')
 The first bead is the carbonyl group, the second is the C-alpha and
 nitrogen, and the final is the side-chain.
 
-1-Bead per residue
+1-Bead per Residue
 ---------
 
 ```python
@@ -191,8 +191,18 @@ This is much simpler. The names are omitted for the beads and it is
 not necessary to pass selection strings to `add_sequential_bonds()`
 since there is only one atom in each residue.
 
-3-residues per Bead
+3-Residues per Bead
 --------------
+
+Finally, here is how to put multiple residues into single beads. An
+array must be passed to the CGUniverse constructor which has a length
+of the desired number of beads and the array contains arrays of
+indices corresponding to the fine-grain residue indices. For example,
+to put residues `1,2,3` into a bead and residues `4,5` into another
+bead this array will accomplish that: `[[1,2,3], [4,5]]`. Here is a
+complete example of reducing every three residues into one bead:
+
+```python
 protein_length = len(fine_uni.residues)
 reduction_map = [[3 * x, 3 * x + 1, 3 * x + 2] for x in range(protein_length / 3)]
 cgu_3 = CGUniverse(fine_uni, ['all'],

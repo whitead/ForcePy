@@ -1,5 +1,5 @@
 from MDAnalysis import Writer
-from MDAnalysis.core.AtomGroup import Universe, AtomGroup, Atom, Residue
+from MDAnalysis.core.AtomGroup import Universe, AtomGroup, Atom, Residue, Segment
 from MDAnalysis.topology.core import Bond
 from MDAnalysis.core.units import get_conversion_factor
 import MDAnalysis.coordinates.base as base
@@ -23,11 +23,17 @@ class CGUniverse(Universe):
         file. The selections define how atoms are grouped PER
         residue. Thus, if there is only one residue defined, then all
         atoms in that selection will be one bead in the CG system.
+        
+        A residue_reduction_map may be used so that multiple residues
+        are combined. It should be an array with a length equal to the
+        total number of desired output residues. Each element should
+        be an array containing indices that point to the fine-grain
+        universe residue indices.
     """
 
-    def __init__(self, otherUniverse, selections, names = None, collapse_hydrogens = True, lammps_force_dump = None):
+    def __init__(self, otherUniverse, selections, names = None, collapse_hydrogens = False, lammps_force_dump = None, residue_reduction_map = None):        
         if(names is None):
-            names = [ "%d" % x for x in range(0, len(selections))]
+            names = [ "%dX" % x for x in range(len(selections))]
         if(len(names) != len(selections)):
             raise ValueError("Length of slections (%d) must match lenght of names (%d)" % (len(selections), len(names)))
         self.ref_u = otherUniverse
@@ -36,6 +42,7 @@ class CGUniverse(Universe):
         self.names = names
         self.chydrogens = collapse_hydrogens
         self.universe = self
+        self.residue_reduction_map = residue_reduction_map
 
         if(lammps_force_dump):
             self.lfdump = open(lammps_force_dump, 'r')
@@ -58,12 +65,29 @@ class CGUniverse(Universe):
         residues = {}
         #keep track of selections, so we can throw a useful error if we don't end up selecting anything
         selection_count = {}
+        segments = {}
         for s in self.selections:
             selection_count[s] = 0
-        for r in self.ref_u.residues:
+
+        #if we're reducing the residues, we'll need to take care of that
+        ref_residues = self.ref_u.residues
+        if(self.residue_reduction_map):
+            #reduce them
+            ref_residues = []
+            for i,ri in enumerate(self.residue_reduction_map):
+                ref_residues.append(Residue(name="CMB", id=i+1, 
+                                            atoms=reduce(lambda x,y: x+y, [self.ref_u.residues[j] for j in ri]),
+                                            resnum=i+1))
+
+        for r in ref_residues:
             residue_atoms = []
             for s,n in zip(self.selections, self.names):
                 group = r.selectAtoms(s)
+
+                #check if there were any selected atoms
+                if(len(group) == 0):
+                    continue
+
                 selection_count[s] += len(group)
                 
                 #make new atom
@@ -72,9 +96,11 @@ class CGUniverse(Universe):
                     raise ValueError('Zero mass CG particle found! Please check all-atom masses and/or set them manually via "fine_grain_universe.selectAtoms(...).set_mass(...)')
 
                 a = Atom(index, n, n, r.name, r.id, r.atoms[0].segid, new_mass, 0) 
-
+                    
                 index += 1
                 for ra in group:
+                    if(ra in reverse_map):
+                        raise ValueError("Attemtping to map {} to {} and {}".format(ra, a, reverse_map[ra]))
                     reverse_map[ra] = a
 
                 #append atom to new residue atom group
@@ -85,11 +111,28 @@ class CGUniverse(Universe):
             residues[r.id] = Residue(r.name, r.id, residue_atoms, resnum=r.resnum)
             for a in residue_atoms:
                 a.residue = residues[r.id]
+
+            #take care of putting residue into segment
+            segid = None if len(residue_atoms) == 0 else residue_atoms[0].segid
+            if(segid in segments):
+                segments[segid].append(residues[r.id])
+            elif(segid):
+                segments[segid] = [residues[r.id]]
+
+
         #check to make sure we selected something
-        for s,count in zip(self.selections, selection_count):
+        total_selected = 0
+        for s in self.selections:
+            count = selection_count[s]
+            total_selected += count
             if(count == 0):
                 raise ValueError("Selection '%s' matched no atoms" % s)        
 
+        #check counting
+        if(len(self.ref_u.atoms) < total_selected):
+            print "Warining: some atoms placed into more than 1 CG Site"
+        elif(len(self.ref_u.atoms) > total_selected):
+            print "Warning: some atoms not placed into CG site"
         
 
         #find hydrogens and collapse them into beads 
@@ -136,7 +179,17 @@ class CGUniverse(Universe):
         self.__trajectory = CGReader(self, self.ref_u.trajectory, self.top_map, self.force_map, self.lfdump)
         for a in self.atoms:
             a.universe = self
+
+        #take care of segments now
+        segment_groups = {}
+        for k,v in segments.iteritems():
+            segment_groups[k] = Segment(k, v)
+        for a in self.atoms:
+            a.segment = segment_groups[a.segid]
+            
         self.atoms._rebuild_caches()
+
+
     
     @property
     def trajectory(self):
@@ -299,8 +352,34 @@ def add_residue_bonds(universe, selection1, selection2):
         group2 = r.selectAtoms(selection2)            
         for a1 in group1:
             for a2 in group2:
-                universe.bonds.append( Bond(a1, a2) )
-                count += 1
+                if(a1 != a2):
+                    universe.bonds.add( Bond(a1, a2) )
+                    count += 1
     print "Added %d bonds" % count
             
 
+def add_sequential_bonds(universe, selection1=None, selection2=None):
+    """this function will add bonds between sequential residues. The atoms within the residue
+       chosen for the bonding are simply the first and last if no selections are given
+    """
+    count = 0
+    if((selection1 or selection2) and not (selection1 and selection2)):
+        raise ValueError("Must give 2 selections for two connecting sites")
+    for s in universe.atoms.segments:
+        last = None
+        for r in s.atoms.residues:
+            if(last is not None):
+                if(selection1):
+                    try:
+                        universe.bonds.add( Bond(r.selectAtoms(selection1)[0], last) )
+                    except IndexError:
+                        raise ValueError("Could not find {} in {}".format(selection1, r))
+                else:
+                    universe.bonds.add( Bond(r.atoms[0], last) )
+                count += 1
+            if(selection2):
+                last = r.atoms.selectAtoms(selection2)[-1]
+            else:
+                last = r.atoms[-1]
+
+    print "Added %d bonds" % count

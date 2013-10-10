@@ -62,7 +62,7 @@ distribution, try adding this line to your `~/.profile` or
 export C_INCLUDE_PATH=/opt/local/include:/Library/Frameworks/EPD64.framework/Versions/7.2/lib/python2.7/site-packages/numpy/core/include:$C_INCLUDE_PATH
 ```
 
-Coarse-graining a trajectory
+Example 1: Coarse-graining a Trajectory of Water
 ==========
 
 The ForcePy module can be used to coarse-grained a trajectory. In this example, we'll convert 
@@ -116,7 +116,7 @@ as their names. The last variable, `collapse_hydrogens`, can be `True`
 or `False`. If it's `True`, then all hydrogens will automatically be
 included in neighboring atoms which are selected. So, for example, if
 you select a carbon, all its hydrogens will be included. Its default
-is `True`.
+is `False`.
 
 Now that you have a coarse-grained trajectory, you may write out the
 structure or trajectory using the following syntax:
@@ -143,7 +143,74 @@ add_residue_bonds(coarse_uni, 'name O', 'name H2')
 ```
 
 This will bond all atoms named `O` with all atoms named `H2` *within
-each residue*.
+each residue*. To add bonds between residues, use this line of code:
+
+```python
+add_sequential_bonds(coarse_uni, 'name C', 'name N')    
+```
+
+The two selection strings will be the bonded parts of each residue.
+
+Example 2: Coarse-graining a Protein
+==================
+
+Here are some examples of coarse-graining a protein with increasingly
+more coarse models
+
+3-Beads per Residue
+-----------
+
+```python
+from MDAnalysis import Universe
+from ForcePy import *
+
+protein_file = 'foo.pdb'
+fine_uni = Universe(protein_file)
+
+cgu_1 = CGUniverse(fine_uni, ['name O or C', 'name N or name CA', '((not name C) and (not name O)) and ((not name n) and (not name CA))'], ['O', 'CA', 'S'], collapse_hydrogens=True)
+
+add_residue_bonds(cgu_1, 'name O', 'name CA')
+add_residue_bonds(cgu_1, 'name CA', 'name S')
+add_sequential_bonds(cgu_1, 'name CA', 'name CA')
+write_structure(cgu_1, 'cg_1.pdb', bonds='all')
+```
+
+The first bead is the carbonyl group, the second is the C-alpha and
+nitrogen, and the final is the side-chain.
+
+1-Bead per Residue
+---------
+
+```python
+cgu_2 = CGUniverse(fine_uni, ['all'])
+add_sequential_bonds(cgu_2)
+write_structure(cgu_2, 'cgu_2.pdb', bonds='all')
+```
+
+This is much simpler. The names are omitted for the beads and it is
+not necessary to pass selection strings to `add_sequential_bonds()`
+since there is only one atom in each residue.
+
+3-Residues per Bead
+--------------
+
+Finally, here is how to put multiple residues into single beads. An
+array must be passed to the CGUniverse constructor which has a length
+of the desired number of beads and the array contains arrays of
+indices corresponding to the fine-grain residue indices. For example,
+to put residues `1,2,3` into a bead and residues `4,5` into another
+bead this array will accomplish that: `[[1,2,3], [4,5]]`. Here is a
+complete example of reducing every three residues into one bead:
+
+```python
+protein_length = len(fine_uni.residues)
+reduction_map = [[3 * x, 3 * x + 1, 3 * x + 2] for x in range(protein_length / 3)]
+cgu_3 = CGUniverse(fine_uni, ['all'],
+                   residue_reduction_map=reduction_map)
+add_sequential_bonds(cgu_3)
+write_structure(cgu_3, 'cgu_3.pdb', bonds='all')
+```
+
 
 Force-Matching
 ===================
@@ -284,10 +351,4 @@ Regularizers
 ==========
 * SmoothRegularizer
 * L2Regularizer
-
-
-
-
-
-
 

@@ -159,7 +159,7 @@ fgu = Universe('topol.tpr', 'traj.trr')
 fgu.trajectory.periodic = True #NOTE: You MUST set this flag yourself, since there is no indication in the TPR files
 cgu = CGUniverse(fgu, ['name OW', 'name HW1 or name HW2'], ['O', 'H2'], False)
 add_residue_bonds(cgu, 'name O', 'name H2')
-fm = ForceMatch(cgu, kT=0.7) #kT is Bolzmann's constant times temperature in the units of the simulation
+fm = ForceMatch(cgu) 
 ```    
 
 At this point, we have a `ForeMatch` object which contains the

@@ -28,14 +28,14 @@ class ForceMatch:
     """Main force match class.
     """
     
-    def __init__(self, cguniverse, kT, input_file = None):
+    def __init__(self, cguniverse, input_json = None):
         self.ref_cats = []
         self.tar_cats = []
         self.ref_forces =  []
         self.tar_forces = []
         self.u = cguniverse
-        if(input_file):
-            self._load_json(input_file) 
+        if(input_json):
+            self._load_json(input_json) 
         else:
             self.json = []
         self.force_match_calls = 0
@@ -45,38 +45,44 @@ class ForceMatch:
         self.tar_force_buffer = None
         self.send_buffer = None
         self.rec_buffer = None
-        assert type(float(kT)) == type(0.), "kT must be a floating point number"
-        self.kt = float(kT)
+
+
     
     def _load_json(self, input_file):
         with open(input_file, 'r') as f:
             self.json = json.load(f)
         self._test_json(self.json, [])
-        self.kt = self.json["kT"]
+
         if("observable" in self.json):
+            self._test_json(self.json, [('kT', 'Boltzmann\'s constant times temperature'), 
+                                        ('observable', 'File containing two columns where the number of rows is equal to frames. First column is total potential energy and second is observable')])
+
+            self.kt = self.json['kT']
+            assert type(self.kt) == type(0.), 'kT must be a floating point number'
+
             self.do_obs = True
             self.obs = [0 for x in range(self.u.trajectory.numframes)]
             self.obs_energy = [0 for x in range(self.u.trajectory.numframes)]
-            with open(self.json["observable"], 'r') as f:
+            with open(self.json['observable'], 'r') as f:
                 lines = f.readlines()
                 if(len(lines) < len(self.obs)):
-                    raise IOError("Number of the frames (%d) does not match number of lines in observation file (%d)" %
+                    raise IOError('Number of the frames (%d) does not match number of lines in observation file (%d)' %
                                   (len(self.obs), len(lines)))
                 for i, line in zip(range(len(self.obs)), lines[:len(self.obs)]):
                     self.obs_energy[i] = float(line.split()[0])
                     self.obs[i] = float(line.split()[1])
 
-            if("observable_set" in self.json):
-                self.obs = np.apply_along_axis(lambda x:(x - self.json["observable_set"]) ** 2, 0, self.obs)
-                print "setting observable to %g" % self.json["observable_set"]
+            if('target_observable' in self.json):
+                self.target_obs = self.json['target_observables']
+                assert type(self.target_obs) == type(0.), 'observable target must be a floating point number'
 
-        if("box" in self.json):
-            if(len(self.json["box"]) != 3):
-                raise IOError("Input file JSON: box must look like \"box\":[5,5,5]. It must have 3 dimensions in an array")
+        if('box' in self.json):
+            if(len(self.json['box']) != 3):
+                raise IOError('Input file JSON: box must look like \"box\":[5,5,5]. It must have 3 dimensions in an array')
 
                 
                 
-    def _test_json(self, json, required_keys = [("structure", "Toplogy file"), ("trajectory", "Trajectory File"), ("kT", "Boltzmann's constant times temperature")]):
+    def _test_json(self, json, required_keys = [("kT", "Boltzmann's constant times temperature")]):
         for rk in required_keys:
             if(not json.has_key(rk[0])):
                 raise IOError("Error in input file, could not find %s\n. Set using %s keyword" % (rk[1], rk[0]))
@@ -182,6 +188,9 @@ class ForceMatch:
 
         if(rank == 0):
             print "Complete"
+            if(do_plots):
+                self._teardown_plot()
+
         
 
     def force_match(self, iterations = 0):
@@ -244,6 +253,8 @@ class ForceMatch:
 
         if(not self.plot_output is None):
             self._save_plot()
+        if(self.plot_frequency != -1):
+            self._teardown_plot()
 
     def _force_match_task(self, start, end, do_print = False):
         ref_forces = np.zeros( (self.u.atoms.numberOfAtoms(), 3) )
@@ -359,10 +370,23 @@ class ForceMatch:
             else:
                 self._force_match_task(rank * span + spanr, (rank + 1) * span + spanr, rank == 0 and not quiet)
         
-    def observation_match(self, obs_sweeps = 25, obs_samples = None, reject_tol = None):
-        """ Match observations
+    def observation_match(self, target_obs = None, obs_sweeps = 25, obs_samples = None, reject_tol = None, do_plots = True):
+        """ Match observations.
         """
+        
+        #check for obs_samples
+        try:
+            self.obs
+        except AttributeError:
+            raise ValueError("Must set observations before calling observation match")  
 
+
+        if(target_obs is None):
+            try:
+                target_obs = self.target_obs
+            except AttributeError:
+                print "Assuming maintainance of observation mean is desired"
+                target_obs = sum(self.obs) / len(self.obs)
         if(obs_samples is None):
             obs_samples = max(5, self.u.trajectory.numframes / obs_sweeps)
         if(reject_tol is None):
@@ -372,6 +396,11 @@ class ForceMatch:
         #we want to cache any force specific parameters so that we
         #can swap them back in afterwards
         self.swap_match_parameters_cache()
+
+
+        if(self.plot_frequency != -1):
+            self._setup_plot()
+
 
         #we're going to sample the covariance using importance
         #sampling. This requires a normalization coefficient, so
@@ -441,13 +470,16 @@ class ForceMatch:
 
                 #store gradient and observabels
                 s_obs[i] = weight * self.obs[i]
+                #we use the index of 1 here because temp_grad normally stores an M x 3 gradient for each dimension. There
+                #is no direction though with the potential functional derivative
                 for f in self.tar_forces:
-                    s_grads[f][i] = weight * np.copy(f.temp_grad[:,1])
+                    s_grads[f][i] = self.kt * weight * np.copy(f.temp_grad[:,1])
 
                 i += 1
                 self._teardown()
 
-            #normalize and calculate covariance
+            #At this point, we have the ratios of probabilties under the new vs old potentials along with the observation at each point and potential functional derivative (`temp_grad') 
+            #Now we use these weights to actually caclulate the covariance.
             for f in self.tar_forces:
                 f.w_grad.fill(0)
                 grad = f.w_grad
@@ -461,16 +493,27 @@ class ForceMatch:
                 for x,y in zip(s_obs, s_grads[f]):
                     grad += (x - meanobs) * (y - meangrad) / normalization
 
-                #recall we need the negative covariance times the inverse temperature
-                grad *= -1. / self.kt
+                #Now the target comes in.
+                grad = -2 * (meanobs - target_obs) * grad
 
-                #now update the weights
+                #Update the lipschitz estimate
                 f.lip += np.square(grad)
                 change = f.eta / np.sqrt(f.lip) * grad
                 f.w = f.w - f.eta / np.sqrt(f.lip) * grad
 
-                print "Obs Mean: %g, reweighted mean: %g" % (sum(self.obs) / len(self.obs) ,meanobs)
+                print "Obs Mean: %g, reweighted mean: %g, target mean:" % (sum(self.obs) / len(self.obs), meanobs, target_obs)
 
+             #make plots
+            if(self.plot_frequency != -1):
+                self._plot_forces()
+
+        if(self.plot_frequency != -1):
+            self._teardown_plot()
+
+
+
+    def _teardown_plot(self):
+        plt.close()
 
     def _setup_plot(self):
 

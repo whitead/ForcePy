@@ -77,13 +77,6 @@ class Pairwise(ForceCategory):
 
     def _teardown(self):
         self.nlist_ready = False
-        
-    def _setup_update(self,u):
-        self._setup(u)
-
-
-    def _teardown_update(self):
-        self._teardown()
 
     def pair_exists(self, u, type1, type2):
         return True
@@ -132,12 +125,6 @@ class Bond(ForceCategory):
     def _teardown(self):
         self.nlist_ready = False
         
-    def _setup_update(self,u):
-        self._setup(u)
-
-    def _teardown_update(self):
-        self._teardown()
-
     def pair_exists(self, u, type1, type2):
         """Check to see if a there exist any pairs of the two types given
         """

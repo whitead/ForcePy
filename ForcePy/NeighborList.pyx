@@ -177,7 +177,7 @@ cdef class NeighborList(object):
                 while(j != - 1):
                     if(i != j and
                        not (j in self.exclusion_list[i]) and
-                        min_img_dist_sq(positions[i], positions[j], self.box, periodic) < self.cutoff ** 2):
+                       min_img_dist_sq(positions[i], positions[j], self.box, periodic) < self.cutoff ** 2):
                         self.nlist[nlist_count] = j
                         self.nlist_lengths[i] += 1
                         nlist_count += 1

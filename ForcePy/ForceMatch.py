@@ -444,24 +444,22 @@ class ForceMatch:
                 self._setup()
 
                  #get weight
-                dev_energy = 0
+                dev_energy = self.obs_energy[index]
                 for f in self.tar_forces:
                     dev_energy -= f.calc_potentials(self.u)
-                        
-                for f in self.ref_forces:
-                    dev_energy += self.obs_energy[index]
-
-                    
+                                            
                 if(abs(dev_energy /self.kt) > 250):
                     rejects += 1
                     if(rejects == reject_tol):
                         print "Rejection rate of frames is too high, restarting force matching"
+                        self._teardown()
                         self.swap_match_parameters_cache()
                         self.force_match(rejects) #arbitrarily using number of rejects for number matces to use
                         self.swap_match_parameters_cache()
                         rejects = 0
                         continue
                     else:
+                        self._teardown()
                         continue
 
                 weight = exp(dev_energy / self.kt)
@@ -570,7 +568,7 @@ class ForceMatch:
                     f.specialize_types(types[i], types[j])
                     self.add_tar_force(f)
 
-    def _sample_ts(self):        
+    def _sample_ts(self):
         self.u.trajectory.rewind()
         index = random.randint(0,self.u.trajectory.numframes - 1)
         [self.u.trajectory.next() for x in range(index)]
@@ -583,13 +581,13 @@ class ForceMatch:
         for rfcat in self.ref_cats:
             rfcat._setup(self.u)
         for tfcat in self.tar_cats:
-            tfcat._setup_update(self.u)        
+            tfcat._setup(self.u)        
 
     def _teardown(self):
         for rfcat in self.ref_cats:
             rfcat._teardown()
         for tfcat in self.tar_cats:
-            tfcat._teardown_update()        
+            tfcat._teardown()        
 
 
     def write_lammps_tables(self, prefix, force_conv=1, energy_conv=1, dist_conv=1, points=1000):

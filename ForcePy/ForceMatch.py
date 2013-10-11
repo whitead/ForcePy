@@ -15,7 +15,7 @@ except ImportError as e:
     
 from ForcePy.Util import *
 from ForcePy.ForceCategories import *
-from ForcePy.CGMap import CGUniverse, apply_mass_map, create_mass_map
+from ForcePy.CGMap import CGUniverse, apply_mass_map, create_mass_map, write_lammps_data
 try:
     from mpi4py import MPI
     mpi_support = True
@@ -763,21 +763,10 @@ class ForceMatch:
         #write data file                   
         #determin sim type
         type_count = self.get_force_type_count()
-        sim_type = "atomic"
-        if(type_count[ForceCategories.Bond] > 0):
-            if(type_count[ForceCategories.Angle] > 0):
-                if(has_charges):
-                    sim_type = "full"
-                else:
-                    sim_type = "molecular"
-            else:
-                sim_type = "bond"
-        elif(has_charges):
-            sim_type = "charge"
-
         
-        write_lammps_data(self.u, '%s_fm.data' % prefix, sim_type, type_count[ForceCategories.Bond] > 0,
-                          type_count[ForceCategories.Angle] > 0, False, False)
+        sim_type = write_lammps_data(self.u, '%s_fm.data' % prefix, bonds=type_count[ForceCategories.Bond] > 0,
+                          angles=type_count[ForceCategories.Angle] > 0, dihedrals=False, impropers=False, 
+                                     force_match=self)
             
         #alright, now we prepare an input file
         with open("%s_fm.inp" % prefix, 'w') as output:

@@ -347,6 +347,10 @@ def _dihedral_generator(bonds):
 
 def write_lammps_data(universe, filename, atom_type=None, bonds=True, angles=False, dihedrals=False, impropers=False, force_match=None):
 
+    '''Write out a lammps file from a Universe. This will return the
+    atom_type of the data file written out.
+    '''
+
     #cases not implemented
     if(force_match and angles):
         raise NotImplementedError()
@@ -370,7 +374,7 @@ def write_lammps_data(universe, filename, atom_type=None, bonds=True, angles=Fal
         if(abs(a.charge) > 0):
             has_charges = True
     if(force_match):
-        type_count = self.get_force_type_count()
+        type_count = force_match.get_force_type_count()
 
     #determine atom type if necessary
     if(not atom_type):
@@ -423,9 +427,8 @@ def write_lammps_data(universe, filename, atom_type=None, bonds=True, angles=Fal
 
 
 
-
+    bindex = 1
     if(bonds):
-        bindex = 1
         btypes = {}
         for b in universe.bonds:
             if(force_match):
@@ -446,8 +449,8 @@ def write_lammps_data(universe, filename, atom_type=None, bonds=True, angles=Fal
                 bond_section.append('%d %d %d %d\n' % (bindex, btype,
                                                    b.atom1.number+1, b.atom2.number+1))
                 bindex += 1
+    aindex = 1
     if(angles):
-        aindex = 1
         atypes = {}
         for a in _angle_generator(universe.bonds):
             #create type which is cat of types, eg HOH 
@@ -464,8 +467,8 @@ def write_lammps_data(universe, filename, atom_type=None, bonds=True, angles=Fal
                                                        a[0].number+1, a[1].number+1, a[2].number+1))
             aindex += 1
 
+    dindex =1 
     if(dihedrals):
-        dindex = 1
         dtypes = {}
         for d in _dihedral_generator(universe.bonds):
             #create type which is cat of types, eg HOH 
@@ -524,6 +527,7 @@ def write_lammps_data(universe, filename, atom_type=None, bonds=True, angles=Fal
                         output.write('\nImpropers\n\n')
                         output.write(''.join(improper_section))
 
+    return atom_type
     
     
 

@@ -18,7 +18,7 @@ import ForcePy.ForceCategories as ForceCategories
 
 
 class CGUniverse(Universe):
-    """ Class which uses center of mass mappings to reduce the number
+    ''' Class which uses center of mass mappings to reduce the number
         of degrees of freedom in a given trajectory/structure
         file. The selections define how atoms are grouped PER
         residue. Thus, if there is only one residue defined, then all
@@ -29,13 +29,13 @@ class CGUniverse(Universe):
         total number of desired output residues. Each element should
         be an array containing indices that point to the fine-grain
         universe residue indices.
-    """
+    '''
 
     def __init__(self, otherUniverse, selections, names = None, collapse_hydrogens = False, lammps_force_dump = None, residue_reduction_map = None):        
         if(names is None):
-            names = [ "%dX" % x for x in range(len(selections))]
+            names = [ '%dX' % x for x in range(len(selections))]
         if(len(names) != len(selections)):
-            raise ValueError("Length of slections (%d) must match lenght of names (%d)" % (len(selections), len(names)))
+            raise ValueError('Length of slections (%d) must match lenght of names (%d)' % (len(selections), len(names)))
         self.ref_u = otherUniverse
         self.atoms = AtomGroup([])
         self.selections = selections
@@ -52,8 +52,8 @@ class CGUniverse(Universe):
 
         self._build_structure()
         
-        print("Topology mapping by center of mass, forces by sum")
-        print("This is %s a periodic trajectory. %d Frames" % ("" if self.trajectory.periodic else "not", self.trajectory.numframes))
+        print('Topology mapping by center of mass, forces by sum')
+        print('This is %s a periodic trajectory. %d Frames' % ('' if self.trajectory.periodic else 'not', self.trajectory.numframes))
 
 
 
@@ -75,7 +75,7 @@ class CGUniverse(Universe):
             #reduce them
             ref_residues = []
             for i,ri in enumerate(self.residue_reduction_map):
-                ref_residues.append(Residue(name="CMB", id=i+1, 
+                ref_residues.append(Residue(name='CMB', id=i+1, 
                                             atoms=reduce(lambda x,y: x+y, [self.ref_u.residues[j] for j in ri]),
                                             resnum=i+1))
 
@@ -93,14 +93,14 @@ class CGUniverse(Universe):
                 #make new atom
                 new_mass = sum([x.mass if x in group else 0 for x in r])
                 if(sum([1 if x in group else 0 for x in r]) > 0 and new_mass == 0):                    
-                    raise ValueError('Zero mass CG particle found! Please check all-atom masses and/or set them manually via "fine_grain_universe.selectAtoms(...).set_mass(...)')
+                    raise ValueError('Zero mass CG particle found! Please check all-atom masses and/or set them manually via \"fine_grain_universe.selectAtoms(...).set_mass(...)\"')
 
                 a = Atom(index, n, n, r.name, r.id, r.atoms[0].segid, new_mass, 0) 
                     
                 index += 1
                 for ra in group:
                     if(ra in reverse_map):
-                        raise ValueError("Attemtping to map {} to {} and {}".format(ra, a, reverse_map[ra]))
+                        raise ValueError('Attemtping to map {} to {} and {}'.format(ra, a, reverse_map[ra]))
                     reverse_map[ra] = a
 
                 #append atom to new residue atom group
@@ -126,13 +126,13 @@ class CGUniverse(Universe):
             count = selection_count[s]
             total_selected += count
             if(count == 0):
-                raise ValueError("Selection '%s' matched no atoms" % s)        
+                raise ValueError('Selection "%s" matched no atoms' % s)        
 
         #check counting
         if(len(self.ref_u.atoms) < total_selected):
-            print "Warining: some atoms placed into more than 1 CG Site"
+            print 'Warining: some atoms placed into more than 1 CG Site'
         elif(len(self.ref_u.atoms) > total_selected):
-            print "Warning: some atoms not placed into CG site"
+            print 'Warning: some atoms not placed into CG site'
         
 
         #find hydrogens and collapse them into beads 
@@ -140,7 +140,7 @@ class CGUniverse(Universe):
             for b in self.ref_u.bonds:
                 #my hack for inferring a hydrogen
                 for a1,a2 in [(b.atom1, b.atom2), (b.atom2, b.atom1)]:
-                    if(a1.type.startswith("H") and a1.mass < 4.):
+                    if(a1.type.startswith('H') and a1.mass < 4.):
                         reverse_map[a1] = reverse_map[a2]
                         #add the mass
                         reverse_map[a2].mass += a1.mass        
@@ -163,7 +163,7 @@ class CGUniverse(Universe):
         self.force_map = self.force_map.tobsr()
                                     
         #add bonds using the reverse map
-        self.bonds = set()
+        self.bonds = []
         for b in self.ref_u.bonds:
             try:
                 cgatom1 = reverse_map[b.atom1]
@@ -171,7 +171,7 @@ class CGUniverse(Universe):
                 for cbg in self.bonds:
                     if(not (cbg.atom1 in [cgatom1, cgatom2]) and not( cbg.atom2 in [cgatom1, cgatom2])):
                     #OK, no bond exists yet
-                        self.bonds.add( Bond(cgatom1, cgatom2) )
+                        self.bonds.append( Bond(cgatom1, cgatom2) )
             except KeyError:
                 #was not in selection
                 pass
@@ -195,16 +195,16 @@ class CGUniverse(Universe):
     def trajectory(self):
         return self.__trajectory
 
-    def cache(self, directory="cg_cache"):
-        """This precomputes the trajectory and structure so that it doesn't need to be 
+    def cache(self, directory='cg_cache'):
+        '''This precomputes the trajectory and structure so that it doesn't need to be 
            recalculated at each timestep. Especially useful for random access.
            Returns a Universe object corresponding to the cached trajectory
-        """
+        '''
 
         if(not os.path.exists(directory)):
             os.mkdir(directory)
-        structure = os.path.join(directory, "cg.pdb")
-        trajectory = os.path.join(directory, "cg.trr")
+        structure = os.path.join(directory, 'cg.pdb')
+        trajectory = os.path.join(directory, 'cg.trr')
         write_structure(self, structure, bonds='all')
         write_trajectory(self, trajectory)        
         u = Universe(structure, trajectory)
@@ -295,7 +295,7 @@ class CGReader(base.Reader):
                 try:
                     forces[int(sline[0]) - 1,:] = [-float(x) for x in sline[1:]]                        
                 except ValueError:
-                    raise IOError( "Invalid forces line at %s" % reduce(lambda x,y: x + " " + y, sline))
+                    raise IOError( 'Invalid forces line at %s' % reduce(lambda x,y: x + ' ' + y, sline))
             self.ts._forces[:] = self.force_map.dot( forces) 
         else:
             try:
@@ -312,23 +312,231 @@ class CGReader(base.Reader):
 #END CGUniverse Stuff
 
 def write_structure(universe, filename, **args):
-    """A symmetric version of the write_trajectory method
-    """
+    '''A symmetric version of the write_trajectory method
+    '''
     universe.atoms.write(filename, **args)
 
+def _bond_neighbor_generator(origin, bonds, exclude = []):
+    '''generator that yields bonded neighbors of a given atom. Pass
+    exclusion list to avoid certain atoms
+    '''
+    exclude.append(origin)
+    for a1, a2 in [(x.atom1, x.atom2) for x in bonds]:
+        if(origin in (a1,a2)):
+            if a1 not in exclude:
+                yield a1
+            if a2 not in exclude:
+                yield a2
+
+def _angle_generator(bonds):
+    '''Generator that yields all possible angles from a set of bonds
+    '''
+    for a1, a2 in [(x.atom1, x.atom2) for x in bonds]:
+        for a3 in _bond_neighbor_generator(a2, bonds, [a1]):
+            yield (a1, a2, a3)
+
+def _dihedral_generator(bonds):        
+    '''Generator that yields all possible dihedrals from a set of bonds
+    '''
+    for a1, a2 in [(x.atom1, x.atom2) for x in bonds]:
+        for a3 in _bond_neighbor_generator(a2, bonds, [a1]):
+            for a4 in _bond_neighbor_generator(a3, bonds, [a1, a2]):
+                yield (a1, a2, a3, a4)
+                
+
+
+def write_lammps_data(universe, filename, atom_type=None, bonds=True, angles=False, dihedrals=False, impropers=False, force_match=None):
+
+    #cases not implemented
+    if(force_match and angles):
+        raise NotImplementedError()
+    if(impropers):
+        raise NotImplementedError()
+
+    possible_atom_types = ('atomic', 'full', 'molecular', 'bond', 'charge')
+    if atom_type and atom_type not in possible_atom_types:
+        raise ValueError('atom_type must be one of {}'.format(possible_atom_types))
+
+    atom_section = []
+    mass_section = []
+    bond_section = []
+    angle_section = []
+    dihedral_section = []
+    type_map = {}
+    atom_types = 0
+    positions = universe.atoms.get_positions()
+    has_charges = False
+    for a in universe.atoms:
+        if(abs(a.charge) > 0):
+            has_charges = True
+    if(force_match):
+        type_count = self.get_force_type_count()
+
+    #determine atom type if necessary
+    if(not atom_type):
+        atom_type = 'atomic'
+        if(bonds):
+            if(angles):
+                if(has_charges):
+                    atom_type = 'full'
+                else:
+                    atom_type = 'molecular'
+            else:
+                atom_type = 'bond'
+        elif(has_charges):
+            atom_type = 'charge'
+
+        
+    for i,a in zip(range(len(universe.atoms)), universe.atoms):
+        assert i == a.number, 'Atom indices are jumbled. Atom %d has number %d' % (i, a.number)
+
+        if(not a.type in type_map):
+            type_map[a.type] = atom_types
+            atom_types += 1
+            mass_section.append('%d %f\n' % (atom_types, a.mass))
+
+
+        if(atom_type == 'full'):
+            atom_section.append('%d %d %d %f %f %f %f\n' % (i+1, a.resid, 
+                                                            type_map[a.type],
+                                                            a.charge, 
+                                                            positions[i,0],
+                                                            positions[i,1],
+                                                            positions[i,2]))                
+        elif(atom_type == 'molecular' or atom_type == 'bond'):
+            atom_section.append('%d %d %d %f %f %f\n' % (i+1, a.resid, 
+                                                         type_map[a.type],
+                                                         positions[i,0],
+                                                         positions[i,1],
+                                                         positions[i,2]))
+        elif(atom_type == 'charge'):
+            atom_section.append('%d %d %f %f %f %f\n' % (i+1, type_map[a.type],
+                                                         a.charge,
+                                                         positions[i,0],
+                                                         positions[i,1],
+                                                         positions[i,2]))
+        elif(atom_type == 'atomic'):
+            atom_section.append('%d %d %f %f %f\n' % (i+1, type_map[a.type],
+                                                      positions[i,0],
+                                                      positions[i,1],
+                                                      positions[i,2]))
+
+
+
+
+    if(bonds):
+        bindex = 1
+        btypes = {}
+        for b in universe.bonds:
+            if(force_match):
+                btype = force_match.get_bond_type_index(b.atom1, b.atom2)
+            else:
+                #create type which is cat of types, eg HOH 
+                btype = ''.join([x.type for x in [b.atom1, b.atom2]])
+                temp =  ''.join([x.type for x in [b.atom2, b.atom1]])
+                #alphabeticl ends
+                if(temp > btype):
+                    btype = temp
+                if(btype not in btypes):
+                    btypes[btype] = len(btypes)
+                btype = btypes[btype]
+              
+  
+            if(btype is not None):
+                bond_section.append('%d %d %d %d\n' % (bindex, btype,
+                                                   b.atom1.number+1, b.atom2.number+1))
+                bindex += 1
+    if(angles):
+        aindex = 1
+        atypes = {}
+        for a in _angle_generator(universe.bonds):
+            #create type which is cat of types, eg HOH 
+            atype = ''.join([x.type for x in a])
+            temp =  ''.join([x.type for x in reversed(a)])
+            #alphabeticl ends
+            if(temp > atype):
+                atype = temp
+            
+            if(atype not in atypes):
+                atypes[atype] = len(atypes)
+            
+            angle_section.append('%d %d %d %d %d\n' % (aindex, atypes[atype],
+                                                       a[0].number+1, a[1].number+1, a[2].number+1))
+
+    if(dihedrals):
+        dindex = 1
+        dtypes = {}
+        for d in _dihedral_generator(universe.bonds):
+            #create type which is cat of types, eg HOH 
+            dtype = ''.join([x.type for x in d])
+            temp =  ''.join([x.type for x in reversed(d)])
+            #alphabeticl ends
+            if(temp > dtype):
+                dtype = temp
+            
+            if(dtype not in dtypes):
+                dtypes[dtype] = len(dtypes)
+            
+            dihedral_section.append('%d %d %d %d %d %d\n' % (dindex, dtypes[dtype],
+                                                       d[0].number+1, d[1].number+1, d[2].number+1, d[3].number+1))
+            
+            
+            
+    improper_section = []
+        
+    with open(filename, 'w') as output:
+
+        #make header
+        output.write('Generated by ForcePy.CGMap.py\n\n')
+        output.write('%d atoms\n' % len(universe.atoms))
+        output.write('%d bonds\n' % (bindex - 1))
+        output.write('%d angles\n' % 0)
+        output.write('%d dihedrals\n' % 0)
+        output.write('%d impropers\n\n' % 0)
+
+        output.write('%d atom types\n' % (atom_types))
+        output.write('%d bond types\n' % (type_count[ForceCategories.Bond] if force_match else len(btypes)))
+        output.write('%d angle types\n' % (type_count[ForceCategories.Angle] if force_match else len(atypes)))
+        output.write('%d dihedral types\n' % (type_count[ForceCategories.Dihedral] if force_match else len(dtypes)))
+        output.write('%d improper types\n\n' % (type_count[ForceCategories.Improper] if force_match else 0))
+
+        output.write('%f %f xlo xhi\n' % (0,universe.trajectory.ts.dimensions[0]))
+        output.write('%f %f ylo yhi\n' % (0,universe.trajectory.ts.dimensions[1]))
+        output.write('%f %f zlo zhi\n\n' % (0,universe.trajectory.ts.dimensions[2]))
+
+        #the rest of the sections        
+        output.write('Masses\n\n')
+        output.write(''.join(mass_section))
+        output.write('\nAtoms\n\n')
+        output.write(''.join(atom_section))
+        if(bonds):
+            output.write('\nBonds\n\n')
+            output.write(''.join(bond_section))
+            if(angles):
+                output.write('\nAngles\n\n')
+                output.write(''.join(angle_section))
+                if(dihedrals):
+                    output.write('\nDihedrals\n\n')
+                    output.write(''.join(dihedral_section))
+                    if(impropers):
+                        output.write('\nImpropers\n\n')
+                        output.write(''.join(improper_section))
+
+    
+    
 
 def write_trajectory(universe, filename):
-    """A simplified method for writing trajectories
-    """
+    '''A simplified method for writing trajectories
+    '''
     w = Writer(filename, universe.atoms.numberOfAtoms())
     for ts in universe.trajectory:
         w.write(ts)
     w.close()
 
 def create_mass_map(universe):
-    """Create a map of masses for atom types in a universe so that they can be applied to a universe without masses assigned
+    '''Create a map of masses for atom types in a universe so that they can be applied to a universe without masses assigned
        to atoms. This is useful if writing a universe with a format that doesn't include masses (gro, pdb).
-    """
+    '''
     mass_map = {}
     for a in universe.atoms:
         if(not a.type in mass_map):
@@ -336,16 +544,16 @@ def create_mass_map(universe):
     return mass_map
 
 def apply_mass_map(universe, mass_map):
-    """Apply a mass_map created by a call to `create_mass_map`
-    """
+    '''Apply a mass_map created by a call to `create_mass_map`
+    '''
     for k,v in mass_map.iteritems():
         universe.selectAtoms('type {}'.format(k)).set_mass(v)
 
 
 def add_residue_bonds(universe, selection1, selection2):
-    """This function will add bonds between atoms mathcing selections and 2
+    '''This function will add bonds between atoms mathcing selections and 2
     within any residue
-    """
+    '''
     count = 0
     for r in universe.atoms.residues:        
         group1 = r.selectAtoms(selection1)
@@ -353,33 +561,47 @@ def add_residue_bonds(universe, selection1, selection2):
         for a1 in group1:
             for a2 in group2:
                 if(a1 != a2):
-                    universe.bonds.add( Bond(a1, a2) )
+                    universe.bonds.append( Bond(a1, a2) )
                     count += 1
-    print "Added %d bonds" % count
+    print 'Added %d bonds' % count
+
+def add_residue_bonds_table(universe, table, residue_name):
+    '''This function will add bonds within a residue by a table.  The
+       table should be 2 columns, where each row is a bond. Index
+       starts at 0.
+    '''
+    count = 0
+    for r in universe.atoms.residues:
+        if(r.name != residue_name):
+            continue
+        for row in table:
+            universe.bonds.append( Bond(r[row[0]], r[row[1]]) )
+            count += 1
+    print 'Added %d bonds' % count
             
 
 def add_sequential_bonds(universe, selection1=None, selection2=None):
-    """this function will add bonds between sequential residues. The atoms within the residue
+    '''this function will add bonds between sequential residues. The atoms within the residue
        chosen for the bonding are simply the first and last if no selections are given
-    """
+    '''
     count = 0
     if((selection1 or selection2) and not (selection1 and selection2)):
-        raise ValueError("Must give 2 selections for two connecting sites")
+        raise ValueError('Must give 2 selections for two connecting sites')
     for s in universe.atoms.segments:
         last = None
         for r in s.atoms.residues:
             if(last is not None):
                 if(selection1):
                     try:
-                        universe.bonds.add( Bond(r.selectAtoms(selection1)[0], last) )
+                        universe.bonds.append( Bond(r.selectAtoms(selection1)[0], last) )
                     except IndexError:
-                        raise ValueError("Could not find {} in {}".format(selection1, r))
+                        raise ValueError('Could not find {} in {}'.format(selection1, r))
                 else:
-                    universe.bonds.add( Bond(r.atoms[0], last) )
+                    universe.bonds.append( Bond(r.atoms[0], last) )
                 count += 1
             if(selection2):
                 last = r.atoms.selectAtoms(selection2)[-1]
             else:
                 last = r.atoms[-1]
 
-    print "Added %d bonds" % count
+    print 'Added %d bonds' % count

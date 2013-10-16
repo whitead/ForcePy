@@ -228,6 +228,15 @@ class CGUniverse(Universe):
             write_structure(self, structure, bonds='all')
             write_trajectory(self, trajectory)        
 
+        #sync area
+        if(mpi_support):
+            
+            comm = MPI.COMM_WORLD
+            rank = comm.Get_rank()
+            #synchronize by using a broadcast
+            comm.bcast(0)
+            
+
         u = Universe(structure, trajectory)
         u.trajectory.periodic = self.trajectory.periodic
         apply_mass_map(u, create_mass_map(self))

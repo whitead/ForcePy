@@ -5,7 +5,7 @@ from ForcePy import *
 import numpy as np
 import pickle
 
-fm = ForceMatch(Universe("lj.pdb", "lj.xyz"), 1, "lj.json")
+fm = ForceMatch(Universe("lj.pdb", "lj.xyz"), "lj.json")
 ff = LJForce(3)
 mesh = Mesh.UniformMesh(0,3,0.005)
 #pwf = SpectralForce(Pairwise, mesh, Basis.Gaussian(mesh, 0.1))

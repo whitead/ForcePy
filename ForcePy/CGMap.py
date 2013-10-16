@@ -9,6 +9,14 @@ from ForcePy.ForceMatch import same_img
 import os
 import ForcePy.ForceCategories as ForceCategories
 
+try:
+    from mpi4py import MPI
+    mpi_support = True
+except ImportError as e:
+    mpi_support = False
+    mpi_error = e
+
+
 
 
 #note to self, build atoms, residues, segs add to AtomGroup and then
@@ -201,12 +209,25 @@ class CGUniverse(Universe):
            Returns a Universe object corresponding to the cached trajectory
         '''
 
-        if(not os.path.exists(directory)):
+        write_files = True
+        
+        if(mpi_support):
+            #check if we're running with MPI
+            comm = MPI.COMM_WORLD
+            rank = comm.Get_rank()
+
+            write_files = rank == 0
+        
+        if(not os.path.exists(directory) and write_files):
             os.mkdir(directory)
+
         structure = os.path.join(directory, 'cg.pdb')
         trajectory = os.path.join(directory, 'cg.trr')
-        write_structure(self, structure, bonds='all')
-        write_trajectory(self, trajectory)        
+
+        if(write_files):
+            write_structure(self, structure, bonds='all')
+            write_trajectory(self, trajectory)        
+
         u = Universe(structure, trajectory)
         u.trajectory.periodic = self.trajectory.periodic
         apply_mass_map(u, create_mass_map(self))

@@ -364,7 +364,7 @@ class AnalyticForce(Force):
                 maskj = self.mask1
             else:
                 continue
-            for r,d,j in self.category.generate_neighbor_vecs(i, u, self.mask2):
+            for r,d,j in self.category.generate_neighbor_vecs(i, u, maskj):
                 #do not double count
                 if(i < j):
                     continue
@@ -386,7 +386,7 @@ class AnalyticForce(Force):
                 maskj = self.mask1
             else:
                 continue
-            for r,d,j in self.category.generate_neighbor_vecs(i, u, self.mask2):
+            for r,d,j in self.category.generate_neighbor_vecs(i, u, maskj):
                 forces[i] += self.call_force(d,self.w) * (r / d)
             nlist_accum += self.category.nlist_lengths[i]
 
@@ -403,7 +403,7 @@ class AnalyticForce(Force):
         else:
             return self.temp_force
 
-        for r,d,j in self.category.generate_neighbor_vecs(i, u, self.mask2):
+        for r,d,j in self.category.generate_neighbor_vecs(i, u, maskj):
             self.temp_force += self.call_force(d, self.w) * r
             f_grad = self.call_grad(d, self.w)            
             self.temp_grad +=  np.outer(f_grad, r)
@@ -488,8 +488,14 @@ class FixedHarmonicForce(AnalyticForce):
 
     def calc_particle_force(self, i, u):
         self.temp_force.fill(0)
+        if(self.mask1[i]):
+            maskj = self.mask2
+        elif(self.mask2[i]):
+            maskj = self.mask1
+        else:
+            return self.temp_force
         
-        for r,d,j in self.category.generate_neighbor_vecs(i, u, self.mask2):
+        for r,d,j in self.category.generate_neighbor_vecs(i, u, maskj):
             self.w_grad[1] += -(d - self.w[1])
 
         return self.temp_force
@@ -590,7 +596,7 @@ class SpectralForce(Force):
 
     @property
     def maxd(self):
-        return self.mesh.max() - self.mesh.dx
+        return self.mesh.max()
         
     def clone_force(self):
         copy = SpectralForce(self.category.__class__, self.mesh, self.basis)
@@ -607,10 +613,7 @@ class SpectralForce(Force):
 
     def calc_potentials(self, u):
 
-        positions = u.atoms.get_positions()
-        nlist_accum = 0        
         potential = 0
-        dims = u.trajectory.ts.dimensions
         self.temp_grad.fill(0)
         for i in range(u.atoms.numberOfAtoms()):
             #check to if this is a valid type
@@ -620,20 +623,17 @@ class SpectralForce(Force):
                 maskj = self.mask1
             else:
                 continue
-            for r,d,j in self.category.generate_neighbor_vecs(i, u, self.mask2):
+            for r,d,j in self.category.generate_neighbor_vecs(i, u, maskj):
                 if( i < j):
                     continue
                 temp = self.basis.potential(d, self.mesh)
                 potential += self.w.dot(temp)
                 self.temp_grad[:,1] += temp
-            nlist_accum += self.category.nlist_lengths[i]
+
         return potential
 
     
     def calc_forces(self, forces, u):        
-        positions = u.atoms.get_positions()
-        nlist_accum = 0        
-        dims = u.trajectory.ts.dimensions
         for i in range(u.atoms.numberOfAtoms()):
             #check to if this is a valid type
             if(self.mask1[i]):
@@ -642,10 +642,9 @@ class SpectralForce(Force):
                 maskj = self.mask1
             else:
                 continue
-            for r,d,j in self.category.generate_neighbor_vecs(i, u, self.mask2):
+            for r,d,j in self.category.generate_neighbor_vecs(i, u, maskj):
                 force = self.w.dot(self.basis.force(d, self.mesh)) * (r / d)
                 forces[i] += force
-            nlist_accum += self.category.nlist_lengths[i]
 
     def calc_particle_force(self, i, u):
         """
@@ -666,9 +665,6 @@ class SpectralForce(Force):
         else:
             return self.temp_force
 
-        positions = u.atoms.get_positions()
-        nlist_accum = np.sum(self.category.nlist_lengths[:i]) if i > 0  else 0
-
 #needed for weaving code:
 #        w_length = len(self.w)
 #        w = self.w
@@ -677,7 +673,7 @@ class SpectralForce(Force):
 
         temp = np.empty( len(self.w) , dtype=np.float32)
         dims = u.trajectory.ts.dimensions
-        for r,d,j in self.category.generate_neighbor_vecs(i, u, self.mask2):
+        for r,d,j in self.category.generate_neighbor_vecs(i, u, maskj):
             self.basis.force_cache(d, temp, self.mesh)
             #tuned cython funciton
             spec_force_inner_loop(self.w, temp, self.temp_grad, self.temp_force, r)

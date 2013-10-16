@@ -15,7 +15,7 @@ except ImportError as e:
     
 from ForcePy.Util import *
 from ForcePy.ForceCategories import *
-from ForcePy.CGMap import CGUniverse, apply_mass_map, create_mass_map
+from ForcePy.CGMap import CGUniverse, apply_mass_map, create_mass_map, write_lammps_data
 try:
     from mpi4py import MPI
     mpi_support = True
@@ -444,24 +444,22 @@ class ForceMatch:
                 self._setup()
 
                  #get weight
-                dev_energy = 0
+                dev_energy = self.obs_energy[index]
                 for f in self.tar_forces:
                     dev_energy -= f.calc_potentials(self.u)
-                        
-                for f in self.ref_forces:
-                    dev_energy += self.obs_energy[index]
-
-                    
+                                            
                 if(abs(dev_energy /self.kt) > 250):
                     rejects += 1
                     if(rejects == reject_tol):
                         print "Rejection rate of frames is too high, restarting force matching"
+                        self._teardown()
                         self.swap_match_parameters_cache()
                         self.force_match(rejects) #arbitrarily using number of rejects for number matces to use
                         self.swap_match_parameters_cache()
                         rejects = 0
                         continue
                     else:
+                        self._teardown()
                         continue
 
                 weight = exp(dev_energy / self.kt)
@@ -570,7 +568,7 @@ class ForceMatch:
                     f.specialize_types(types[i], types[j])
                     self.add_tar_force(f)
 
-    def _sample_ts(self):        
+    def _sample_ts(self):
         self.u.trajectory.rewind()
         index = random.randint(0,self.u.trajectory.numframes - 1)
         [self.u.trajectory.next() for x in range(index)]
@@ -583,13 +581,13 @@ class ForceMatch:
         for rfcat in self.ref_cats:
             rfcat._setup(self.u)
         for tfcat in self.tar_cats:
-            tfcat._setup_update(self.u)        
+            tfcat._setup(self.u)        
 
     def _teardown(self):
         for rfcat in self.ref_cats:
             rfcat._teardown()
         for tfcat in self.tar_cats:
-            tfcat._teardown_update()        
+            tfcat._teardown()        
 
 
     def write_lammps_tables(self, prefix, force_conv=1, energy_conv=1, dist_conv=1, points=1000):
@@ -762,123 +760,13 @@ class ForceMatch:
                                         dist_conv = 1,
                                         points=table_points)
 
-        #write data file
-
-                   
-        atom_section = []
-        mass_section = []
-        bond_section = []
-        type_map = {}
-        atom_types = 0
-        positions = self.u.atoms.get_positions()
-        has_charges = False
-        for a in self.u.atoms:
-            if(abs(a.charge) > 0):
-                has_charges = True
-
-
+        #write data file                   
         #determin sim type
         type_count = self.get_force_type_count()
-        sim_type = "atomic"
-        if(type_count[ForceCategories.Bond] > 0):
-            if(type_count[ForceCategories.Angle] > 0):
-                if(has_charges):
-                    sim_type = "full"
-                else:
-                    sim_type = "molecular"
-            else:
-                sim_type = "bond"
-        elif(has_charges):
-            sim_type = "charge"
-
         
-        for i,a in zip(range(len(self.u.atoms)), self.u.atoms):
-            assert i == a.number, "Atom indices are jumbled. Atom %d has number %d" % (i, a.number)
-            if(sim_type == "full"):
-                atom_section.append("%d %d %d %f %f %f %f\n" % (i+1, a.resid, 
-                                                            self.get_atom_type_index(a),
-                                                            a.charge, 
-                                                            positions[i,0],
-                                                            positions[i,1],
-                                                            positions[i,2]))                
-            elif(sim_type == "molecular" or sim_type == "bond"):
-                atom_section.append("%d %d %d %f %f %f\n" % (i+1, a.resid, 
-                                                         self.get_atom_type_index(a),
-                                                         positions[i,0],
-                                                         positions[i,1],
-                                                         positions[i,2]))
-            elif(sim_type == "charge"):
-                atom_section.append("%d %d %f %f %f %f\n" % (i+1, self.get_atom_type_index(a),
-                                                         a.charge,
-                                                         positions[i,0],
-                                                         positions[i,1],
-                                                         positions[i,2]))
-            elif(sim_type == "atomic"):
-                atom_section.append("%d %d %f %f %f\n" % (i+1, self.get_atom_type_index(a),
-                                                      positions[i,0],
-                                                      positions[i,1],
-                                                      positions[i,2]))
-
-
-
-
-
-            if(not a.type in type_map):
-                type_map[a.type] = atom_types
-                atom_types += 1
-                mass_section.append("%d %f\n" % (atom_types, a.mass))
-
-
-        bindex = 1
-        for b in self.u.bonds:
-            btype = self.get_bond_type_index(b.atom1, b.atom2)
-            if(btype is not None):
-                bond_section.append("%d %d %d %d\n" % (bindex, btype,
-                                                   b.atom1.number+1, b.atom2.number+1))
-                bindex += 1
-        
-        angle_section = []
-        dihedral_section = []
-        improper_section = []
-        
-        with open('%s_fm.data' % prefix, 'w') as output:
-
-            #make header
-            output.write('Generated by ForcePy.CGMap.py\n\n')
-            output.write('%d atoms\n' % len(self.u.atoms))
-            output.write('%d bonds\n' % (bindex - 1))
-            output.write('%d angles\n' % 0)
-            output.write('%d dihedrals\n' % 0)
-            output.write('%d impropers\n\n' % 0)
-
-            output.write("%d atom types\n" % (atom_types))
-            output.write("%d bond types\n" % type_count[ForceCategories.Bond])
-            output.write("%d angle types\n" % type_count[ForceCategories.Angle])
-            output.write("%d dihedral types\n" % type_count[ForceCategories.Dihedral])
-            output.write("%d improper types\n\n" % type_count[ForceCategories.Improper])
-
-            output.write('%f %f xlo xhi\n' % (0,self.u.trajectory.ts.dimensions[0]))
-            output.write('%f %f ylo yhi\n' % (0,self.u.trajectory.ts.dimensions[1]))
-            output.write('%f %f zlo zhi\n\n' % (0,self.u.trajectory.ts.dimensions[2]))
-
-            #the rest of the sections
-                
-            output.write("Masses\n\n")
-            output.write("".join(mass_section))
-            output.write("\nAtoms\n\n")
-            output.write("".join(atom_section))
-            if(type_count[ForceCategories.Bond] > 0):
-                output.write("\nBonds\n\n")
-                output.write("".join(bond_section))
-                if(type_count[ForceCategories.Angle] > 0):
-                    output.write("\nAngles\n\n")
-                    output.write("".join(angle_section))
-                    if(type_count[ForceCategories.Dihedrals] > 0):
-                        output.write("\nDihedrals\n\n")
-                        output.write("".join(dihedral_section))
-                        if(type_count[ForceCategories.Impropers] > 0):
-                            output.write("\nImpropers\n\n")
-                            output.write("".join(improper_section))
+        sim_type = write_lammps_data(self.u, '%s_fm.data' % prefix, bonds=type_count[ForceCategories.Bond] > 0,
+                          angles=type_count[ForceCategories.Angle] > 0, dihedrals=False, impropers=False, 
+                                     force_match=self)
             
         #alright, now we prepare an input file
         with open("%s_fm.inp" % prefix, 'w') as output:

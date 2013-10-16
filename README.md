@@ -85,7 +85,7 @@ fine-grained trajectory is:
 
 ```python
 fine_uni = Universe("foo.tpr", "foo.trr")
-fine_unit.trajectory.periodic = True #NOTE: You MUST set this flag yourself, since there is no indication in the TPR files
+fine_uni.trajectory.periodic = True #NOTE: You MUST set this flag yourself, since there is no indication in the TPR files
 ```
 
 Now we create a coarse-grained trajectory using the fine-grained trajectory as 

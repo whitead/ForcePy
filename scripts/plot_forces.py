@@ -108,20 +108,21 @@ if __name__ == "__main__":
     parser.add_argument('directory_prefix', help='directories containing lammps tables should be prefix0 prefix1 prefix2... etc. Note that the first directory must be prefix0')
     parser.add_argument('-table_points',  type=int, default=10000)
     pargs = parser.parse_args()
+    prefix = pargs.directory_prefix
     
 
     for k in pot_types.iterkeys():
-        ntables = max((count_remaining_tables(x, table_points=pargs.table_points) for x in walk_files(k)))
-        passes = sum(1 for x in walk_files(k))    
+        ntables = max((count_remaining_tables(x, table_points=pargs.table_points) for x in walk_files(k, prefix)))
+        passes = sum(1 for x in walk_files(k,prefix))    
         print 'There are {} potentials for the {} type which were refined {} times'.format(ntables, k, passes)
         for i in range(ntables):
             plt.figure(figsize=(16,9))
-            for p in plot_tables(gen_tables(walk_files(k), i, table_points=pargs.table_points), N=passes):
+            for p in plot_tables(gen_tables(walk_files(k, prefix), i, table_points=pargs.table_points), N=passes):
                 pass
             p.savefig('{}_potential_{}.pdf'.format(k, i), bbox_inches=0)
             
             plt.figure(figsize=(16,9))
-            for p in plot_tables(gen_tables(walk_files(k), i, table_points=pargs.table_points), N=passes, plot_column=2):
+            for p in plot_tables(gen_tables(walk_files(k, prefix), i, table_points=pargs.table_points), N=passes, plot_column=2):
                 pass
             p.savefig('{}_force_{}.pdf'.format(k, i), bbox_inches=0)
 

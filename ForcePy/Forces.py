@@ -14,7 +14,7 @@ class Force(object):
        To be used in the stochastic gradient step, a force should implement all of the methods here
     """
     
-    def _setup_update_params(self, w_dim, initial_w=-500, eta=None, hard_pow=12):
+    def _setup_update_params(self, w_dim, initial_w=-1, eta=None, hard_pow=12):
         """ Assumes a line from given initial height down to zero. Basically repulsive force
         """
         self.eta = eta

@@ -2,7 +2,7 @@ from MDAnalysis import Universe
 from ForcePy import *
 
 
-fm = ForceMatch(Universe("cg.pdb", "cg.trr"), 0.7)
+fm = ForceMatch(Universe("cg.pdb", "cg.trr"))
 fm.u.trajectory.periodic = True
 ff = FileForce()
 pmesh = Mesh.UniformMesh(2.7,15,0.01)

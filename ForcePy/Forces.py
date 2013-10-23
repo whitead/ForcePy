@@ -1,6 +1,7 @@
 from ForcePy.ForceCategories import Pairwise, Bond, Angle, Dihedral
 from ForcePy.Mesh import UniformMesh 
 from ForcePy.Util import norm3, spec_force_inner_loop, min_img_vec
+from ForcePy.States import State_Mask
 
 import numpy as np
 import random
@@ -252,7 +253,11 @@ class Force(object):
         name = "F"
         try:
             name = self._short_name
-            name = "%s_%s_%s" % (name, self.sel1, self.sel2)
+            if(self.sel1 is not None and self.sel2 is not None):
+                name = "%s_%s_%s" % (name, self.sel1, self.sel2)
+            #check if the masks are secretely state masks
+            elif(self.mask1 and type(self.mask1 == State_Mask)):
+                name = "{}_{}_{}".format(name, self.mask1.state, self.mask2.state)
             name = ''.join(name.split()) #remove whitesspace
         except AttributeError:
             pass

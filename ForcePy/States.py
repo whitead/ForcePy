@@ -16,7 +16,7 @@ class State_Mask(object):
         if(ag.state is None):            
             x = random.random()
             vsum = 0
-            for i,v in enumerate(self.fxn(ag)):
+            for i,v in enumerate(self.fxn(ag.ag)):
                 vsum += v
                 if(x <= vsum):
                     break

@@ -10,7 +10,4 @@ pwf = SpectralForce(Pairwise, mesh, Basis.UnitStep)
 fm.add_ref_force(ff)
 fm.add_and_type_pair(pwf)
 fm.force_match()
-fm.force_match()
-fm.force_match()
-fm.force_match()
 

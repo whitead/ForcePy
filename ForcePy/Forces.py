@@ -14,6 +14,13 @@ class Force(object):
        To be used in the stochastic gradient step, a force should implement all of the methods here
     """
     
+    def __init__(self):
+        self.sel1 = None
+        self.sel2 = None
+        self.mask1 = None
+        self.mask2 = None
+
+    
     def _setup_update_params(self, w_dim, initial_w=-1, eta=None, hard_pow=12):
         """ Assumes a line from given initial height down to zero. Basically repulsive force
         """
@@ -35,8 +42,6 @@ class Force(object):
         self.w_grad = np.empty( w_dim, dtype=np.float32)
         self.regularization = []
         self.lip = np.ones( np.shape(self.w) , dtype=np.float32)
-        self.sel1 = None
-        self.sel2 = None
 
     def update(self, df):
         negative_grad = self.w_grad #not actually negative yet. The negative sign is in the df
@@ -77,22 +82,28 @@ class Force(object):
         self.sel2 = selection_pair_2
         self.type_name = "[%s] -- [%s]" % (selection_pair_1, selection_pair_2)
 
+    def specialize_states(self, mask1, mask2, name1 = None, name2 = None):
+        self.mask1 = mask1
+        self.mask2 = mask2
+        self.type_name = "[state %s] -- [state %s]" % (name1, name2)
+
 
     def _build_mask(self, sel1, sel2, u):
-        if(sel1 is None):
-            self.mask1 = [True for x in range(u.atoms.numberOfAtoms())]
-        else:
+        if(self.mask1 is None and sel1 is not None):
             self.mask1 = [False for x in range(u.atoms.numberOfAtoms())]
             for a in u.selectAtoms('type %s' % sel1):
                 self.mask1[a.number] = True
+        elif(self.mask1 is None):
+            self.mask1 = [True for x in range(u.atoms.numberOfAtoms())]
+
             
-        if(sel2 is None):
-            self.mask2 = self.mask1
-        else:
+        if(self.mask2 is None and sel2 is not None):
             self.mask2 = [False for x in range(u.atoms.numberOfAtoms())]
             for a in u.selectAtoms('type %s' % sel2):
                 self.mask2[a.number] = True
-
+        elif(self.mask2 is None):
+            self.mask2 = self.mask1
+        
     def valid_pair(self, atom1, atom2):
         """Checks the two atoms' types to see if they match the type
            specialization. If no type selections are set, returns true
@@ -310,7 +321,8 @@ class AnalyticForce(Force):
     """
 
 
-    def __init__(self, category, f, g, n, cutoff=None, potential = None):
+    def __init__(self, category, f, g, n, cutoff=None, potential = None):        
+        super(AnalyticForce, self).__init__()
         self.call_force = f
         self.call_grad = g
         self.call_potential = potential
@@ -320,6 +332,7 @@ class AnalyticForce(Force):
         self.cutoff = cutoff
         self._long_name = "AnalyticForce for %s" % category.__name__
         self._short_name = "AF_%s" % category.__name__
+
 
     def clone_force(self):
         assert type(copy) == AnalyticForce, "Must implement clone_force method for %s" % type(copy)
@@ -564,7 +577,7 @@ class L2Regularizer(Regularizer):
 
     @staticmethod
     def reg_fxn(x):
-        return ln.norm(x)    
+        return ln.norm(x)
 
 
 class SpectralForce(Force):
@@ -576,6 +589,7 @@ class SpectralForce(Force):
     """
     
     def __init__(self, category, mesh, basis):
+        super(SpectralForce, self).__init__()
         self.basis = basis
         self.mesh = mesh
         #create weights 
@@ -665,36 +679,14 @@ class SpectralForce(Force):
         else:
             return self.temp_force
 
-#needed for weaving code:
-#        w_length = len(self.w)
-#        w = self.w
-#        temp_grad = self.temp_grad
-#        force = self.temp_force
-
         temp = np.empty( len(self.w) , dtype=np.float32)
         dims = u.trajectory.ts.dimensions
         for r,d,j in self.category.generate_neighbor_vecs(i, u, maskj):
             self.basis.force_cache(d, temp, self.mesh)
             #tuned cython funciton
             spec_force_inner_loop(self.w, temp, self.temp_grad, self.temp_force, r)
-# weave code:
-#            code = """
-#                   #line 255 "Forces.py"
-#     
-#                   for(int i = 0; i < w_length; i++) {
-#                       for(int j = 0; j < 3; j++) {
-#                           force(j) += w(i) * temp(i) * r(j);
-#                           temp_grad(i,j) += temp(i) * r(j);
-#                       }
-#                    }
-#                    """
-#            weave.inline(code, ['w', 'w_length', 'temp', 'r', 'force', 'temp_grad'],
-#                         type_converters=converters.blitz,
-#                         compiler = 'gcc')
-# pure numpy code:
-#            force +=  self.w.dot(temp) * r
-#            self.temp_grad +=  np.outer(temp, r)
 
         return self.temp_force
+
 
 

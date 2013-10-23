@@ -6,6 +6,7 @@ import MDAnalysis.coordinates.base as base
 import numpy as np
 import scipy.sparse as npsp
 from ForcePy.ForceMatch import same_img
+from ForcePy.States import State_Mask
 import os
 import ForcePy.ForceCategories as ForceCategories
 
@@ -19,11 +20,14 @@ except ImportError as e:
 
 
 
-#note to self, build atoms, residues, segs add to AtomGroup and then
-# call build_cache. Can also call set position on the
-# atomgroup. Initializing a residue correctly sets the residue type of
-# atoms.
+class AtomGroupWrapper(object):
+    def __init__(self, ag):
+        self.ag = ag
+        self.state = None
 
+    def clear_state(self):
+        self.state = None
+    
 
 class CGUniverse(Universe):
     ''' Class which uses center of mass mappings to reduce the number
@@ -69,7 +73,7 @@ class CGUniverse(Universe):
         #atoms cannot be written out of index order, so we 
         #need to iterate residue by residue
         index = 0
-        reverse_map = {}
+        reverse_map = {} #keys = fine atoms, values = coarse beads
         residues = {}
         #keep track of selections, so we can throw a useful error if we don't end up selecting anything
         selection_count = {}
@@ -158,13 +162,23 @@ class CGUniverse(Universe):
         self.top_map = npsp.lil_matrix( (self.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) , dtype=np.float32)
         self.force_map = npsp.lil_matrix( (self.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) , dtype=np.float32)
 
+        #keep a forward map for use in state-masks
+        #The key is a CG atom number and the value is an atom group of the fine-grain atoms
+        self.forward_map = [[] for x in range(self.atoms.numberOfAtoms())]
+
         for a in self.ref_u.atoms:
             try:
                 self.top_map[reverse_map[a].number, a.number] = a.mass / reverse_map[a].mass
                 self.force_map[reverse_map[a].number, a.number] = 1.
+                self.forward_map[reverse_map[a].number] += [a.number]
             except KeyError:
                 #was not selected
                 pass
+
+        for i in range(self.atoms.numberOfAtoms()):
+            #convert the list of atom indices into an AtomGroup object
+            #it has to be wraped so we can manipulate it later
+            self.forward_map[i] = AtomGroupWrapper(reduce(lambda x,y: x + y, [self.ref_u.atoms[x] for x in self.forward_map[i]]))
         
         #Put them into efficient sparse matrix.
         self.top_map = self.top_map.tobsr()
@@ -241,7 +255,15 @@ class CGUniverse(Universe):
         u.trajectory.periodic = self.trajectory.periodic
         apply_mass_map(u, create_mass_map(self))
         return u
-    
+
+    def make_state_mask(self, state_function, state_number):
+        """Creates a State_Mask object. The sate_function should take
+           an MDAnalysis atom group from the fine-grain universe that
+           made up the CG site. The function should return a vector of
+           membership percentages for each state. The number of states
+           is state_number. This returns an array of masks for each
+           possible state"""
+        return [State_Mask(self.forward_map, state_function, x) for x in range(state_number)]
 
 class Timestep(base.Timestep):
     
@@ -333,6 +355,12 @@ class CGReader(base.Reader):
             except AttributeError:
                 #can't find any forces, use 0
                 self.ts._forces[:] = np.zeros( (self.numatoms, 3) ,dtype=np.float32)
+
+
+        #if we're doing multistate stuff, we need to clear the states each step
+        if(type(self.u) == CGUniverse):
+            for ag in self.u.forward_map:
+                ag.clear_state()
 
         return self.ts
 

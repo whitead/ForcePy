@@ -554,6 +554,18 @@ class ForceMatch:
         plot_fig.tight_layout()
         plt.savefig(self.plot_output)
 
+    def add_and_type_states(self, force, state_function, state_names):
+        if(type(self.u) != CGUniverse):
+            raise ValueError("Must use CGUniverse for states")
+        masks = self.u.make_state_mask(state_function, len(state_names))
+        for i in range(len(state_names)):
+            for j in range(i,len(state_names)):
+                f = force.clone_force()
+                f.specialize_states(masks[i],
+                                    masks[j],
+                                    state_names[i],
+                                    state_names[j])
+                self.add_tar_force(f)
 
 
     def add_and_type_pair(self, force):

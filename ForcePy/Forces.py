@@ -203,6 +203,20 @@ class Force(object):
                 self.potential_ax.set_ylim(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*max(self.plot_potential))
 
 
+    def teardown_plot(self):
+        #These are in a specific order
+        try:
+            del self.plot_x
+            del self.plot_force
+            del self.true_force
+            del self.true_potential
+            del self.force_ax
+            del self.force_line
+            del self.potential_ax
+            del self.plot_potential
+            del self.potential_line
+        except AttributeError:
+            pass
 
     def write_lammps_table(self, outfile, force_conv=1., energy_conv=1., dist_conv=1., points=10000):
         import os
@@ -235,7 +249,20 @@ class Force(object):
         #ATTENTION ATTENTION ATTENTION: This code here uses the lammps way of tabular forces, in that
         #positive force is repulsive.
                       
-    
+    def write_table(self, outfile, force_conv=1., energy_conv=1., dist_conv=1., points=10000):
+        outfile.write('#%s\n\n' % self.name)
+        rvals = np.arange( self.mind, self.maxd, (self.maxd - self.mind) / float(points))
+        force = np.empty( len(rvals) )
+        potential = np.empty( len(rvals) )
+
+        self.calc_force_array(rvals, force)
+        self.calc_potential_array(rvals, potential)
+
+        for i in range(len(rvals)):
+            outfile.write("%d %f %f %f\n" % (i+1, dist_conv * rvals[i], energy_conv * potential[i], force_conv * force[i]))
+
+
+
 
     @property
     def name(self):
@@ -503,6 +530,9 @@ class FixedHarmonicForce(AnalyticForce):
     def clone_force(self):
         copy = FixedHarmonicForce(self.category.__class__, k=self.k, x0=self.x0, x0_guess=self.w[1])
         return copy    
+
+    def __reduce__(self):
+        return FixedHarmonicForce, (self.category.__class__, self.k, self.x0, self.w[1])
 
     def calc_particle_force(self, i, u):
         self.temp_force.fill(0)

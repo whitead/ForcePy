@@ -80,6 +80,9 @@ class Pairwise(ForceCategory):
 
     def pair_exists(self, u, type1, type2):
         return True
+
+    def __reduce__(self):
+        return Pairwise, (self.cutoff,)
     
 class Bond(ForceCategory):
 

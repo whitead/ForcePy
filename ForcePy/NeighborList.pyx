@@ -187,3 +187,4 @@ cdef class NeighborList(object):
 
     def build_nlist(self, u):        
         return self.nlist[:self._build_nlist(u)], self.nlist_lengths
+

@@ -12,14 +12,6 @@ Copyright 2013 Andrew White
 This code is provided as a preview of an upcoming licensed and peer-reviewed/published version. It is currently unlicensed, meaning modification, distribution, sublicensing and commercial use are forbidden.
 The unmodified code may be used for private and non-commercial use.
 
-Usage Examples
-===============
-
-1. Taking an all-atom trajectory and mapping it to a coarse-grained trajectory with CG-sites defined using Charmm/VMD-style selection strings
-2. Using forces from an all-atom trajectory and creating a force-field that matches those forces
-3. Writing out a force-field to a lammps-style tabulated potential
-
-
 Installing ForcePy
 ===============
 

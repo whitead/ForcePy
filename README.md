@@ -1,10 +1,16 @@
 Summary
 =======
 
-Force matching code. Supports input from Gromacs and Lammps. Not
-tested for input NAMD simulations. Outputs Lammps tabular potentials
-and input files. Also can be used for topology reduction in
-coarse-graining.
+Force-matching and utilities package. Supports input from Gromacs and Lammps. Not
+tested for input NAMD simulations. Outputs Lammps tabular potentials, input files, and plain text tabular potentials. 
+Can be used independently for topology reduction in coarse-graining. 
+
+## License
+
+Copyright 2013 Andrew White
+
+This code is provided as a preview of an upcoming licensed and peer-reviewed/published version. It is currently unlicensed, meaning modification, distribution, sublicensing and commercial use are forbidden.
+The unmodified code may be used for private and non-commercial use.
 
 Usage Examples
 ===============

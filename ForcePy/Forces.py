@@ -23,7 +23,7 @@ class Force(object):
         self.mask2 = None
 
     
-    def _setup_update_params(self, w_dim, initial_w=-1, eta=None, hard_pow=12):
+    def _setup_update_params(self, w_dim, initial_w=1, eta=None, hard_pow=12):
         """ Assumes a line from given initial height down to zero. Basically repulsive force
         """
         self.eta = eta
@@ -465,7 +465,7 @@ class LJForce(AnalyticForce):
         
     @staticmethod
     def lj(d, w):
-        return 4 * w[0] * (6 * (w[1] / d) ** 7 - 12 * (w[1] / d) ** 13)
+        return -4 * w[0] * (6 * (w[1] / d) ** 7 - 12 * (w[1] / d) ** 13)
 
     @staticmethod
     def ulj(d, w):

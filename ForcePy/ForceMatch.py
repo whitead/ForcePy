@@ -609,6 +609,27 @@ class ForceMatch:
         for tfcat in self.tar_cats:
             tfcat._teardown()        
 
+            
+    def write(self, folder = os.curdir, table_points=10000, force_conversion = 1.0, energy_conversion=1, distance_conversion=1):
+
+        if(not os.path.exists(folder)):
+            os.mkdir(folder)
+        original_dir = os.path.abspath(os.getcwd())
+        os.chdir(folder)
+ 
+        try:
+            for rf in self.tar_forces:
+                with open("{}.txt".format(rf.short_name), 'w') as f:
+                    rf.write_table(f, force_conversion, energy_conversion, distance_conversion, table_points)
+            import pickle
+            pickle.dump(self, 'restart.pickle', pickle.HIGHEST_PROTOCOL)
+        except (IOError,AttributeError) as e:
+            print e
+        finally:
+            os.chdir(original_dir)
+
+        
+
 
     def write_lammps_tables(self, prefix, force_conv=1, energy_conv=1, dist_conv=1, points=1000):
         

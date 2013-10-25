@@ -343,8 +343,9 @@ class CGReader(base.Reader):
                 pass
             for i in range(len(forces)):
                 sline = self.lfdump.readline().split()
+                #NOTE: Forces from lammps seem to be negative
                 try:
-                    forces[int(sline[0]) - 1,:] = [float(x) for x in sline[1:]]                        
+                    forces[int(sline[0]) - 1,:] = [-float(x) for x in sline[1:]]                        
                 except ValueError:
                     raise IOError( 'Invalid forces line at %s' % reduce(lambda x,y: x + ' ' + y, sline))
             self.ts._forces[:] = self.force_map.dot( forces) 

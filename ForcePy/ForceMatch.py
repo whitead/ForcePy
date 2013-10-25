@@ -439,11 +439,20 @@ class ForceMatch:
         self.send_buffer[1] = exp((self.send_buffer[1] - data_receive[0]) / self.kt)
         #reuse data_send to store information about 0-weighted frames
         data_send = np.array(self.send_buffer[1] < 0.0000001, dtype=np.float32)
-        self.send_buffer[2:] *= self.send_buffer[1]
 
+        comm.Allreduce([data_send, MPI.FLOAT], [data_receive, MPI.FLOAT], op=MPI.SUM)
+
+
+        #before going further, check if we got enough accepted frames (> 1)
+        if(size - data_receive[0] <= 1):
+            #not close enough :(
+            return False            
+
+
+        #looks good, let's reweight and continue
+        self.send_buffer[2:] *= self.send_buffer[1]
         self.rec_buffer.fill(0)
         comm.Reduce([self.send_buffer, MPI.FLOAT], [self.rec_buffer, MPI.FLOAT], op=MPI.SUM)
-        comm.Reduce([data_send, MPI.FLOAT], [data_receive, MPI.FLOAT], op=MPI.SUM)
 
         #now average results
         if rank == 0:
@@ -454,13 +463,6 @@ class ForceMatch:
         #update results
         if rank == 0:
             print "{:<16} {:<16} {:<16} {:<5}/{:<10}" .format(sum(self.obs) / len(self.obs), meanobs, target_obs, int(size - data_receive[0]), size)
-
-
-        #before going further, check if we got enough accepted frames (> 1)
-        if(size - data_receive[0] <= 1):
-            #not close enough :(
-            return False
-            
 
         self.rec_buffer = comm.bcast(self.rec_buffer)
 
@@ -556,10 +558,11 @@ class ForceMatch:
             if(not self._observation_match_mpi_step(target_obs)):
                 if(rank == 0):
                     print "Rejection rate of frames is too high, restarting force matching"
-                self._teardown()
                 self.swap_match_parameters_cache()
                 self.force_match_mpi(frame_number = size, do_plots=False, quiet=False)
                 self.swap_match_parameters_cache()
+                if(rank == 0):
+                    print "{:<16} {:<16} {:<16} {:<16}" .format("observed" , "reweighted", "target", "acceptance")
                 continue
 
              #make plots

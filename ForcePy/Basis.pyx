@@ -43,7 +43,7 @@ class UnitStep(object):
         mesh_point = mesh.mesh_index(x)
         for i in range(lm - 1, mesh_point - 1, -1):
             result[i] = (mesh[i + 1] - mesh[i])
-        return -result
+        return result
 
 
 cdef class Quartic(object):
@@ -126,7 +126,7 @@ cdef class Quartic(object):
             result[i] = mesh.dx
         for i in range(maxb, max(-1, mesh_point - self.basis_n - 1), -1):
             result[i] = mesh.dx * self._int_basis(x, mesh.cgetitem(i))
-        return -result
+        return result
 
     def __reduce__(self):
         return Quartic, (None, None, self.basis_n, self.inv_width)
@@ -214,7 +214,7 @@ cdef class Gaussian(object):
             result[i] = mesh.dx
         for i in range(maxb, max(-1, mesh_point - self.basis_n - 1), -1):
             result[i] = mesh.dx * self._int_basis(x, mesh.cgetitem(i))
-        return -result
+        return result
 
     def __reduce__(self):
         return Gaussian, (None, None, self.basis_n, self.inv_sigma)

@@ -152,7 +152,7 @@ class ForceMatch:
         rank = comm.Get_rank()
         size = comm.Get_size()
 
-        batch = range(0,len(self.u.trajectory), int(math.floor(len(self.u.trajectory) / size)))
+        batch = range(0,len(self.u.trajectory), int(floor(len(self.u.trajectory) / size)))
         
         self.u.trajectory.rewind()
         

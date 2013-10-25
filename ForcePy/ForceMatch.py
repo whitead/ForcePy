@@ -193,7 +193,6 @@ class ForceMatch:
                         self._plot_forces()
 
         if(rank == 0):
-            print "Complete"
             if(do_plots):
                 self._teardown_plot()
 
@@ -375,11 +374,149 @@ class ForceMatch:
                 self._force_match_task(rank * (span + 1), (rank + 1) * (span + 1), rank == 0 and not quiet)
             else:
                 self._force_match_task(rank * span + spanr, (rank + 1) * span + spanr, rank == 0 and not quiet)
-    
+
+    def _setup_obs_buffers(self):
+        #     0          1           2                3-->
+        #sample-index  weight weighted-sample   weighted-gradients
+        buffer_size = 3
+        for f in self.tar_forces:
+            buffer_size += len(f.temp_grad[:,1])
+        #we need to use the buffer to store from a gather too, so check that size
+        if(mpi_support):
+            comm = MPI.COMM_WORLD
+            size = comm.Get_size()
+            if(buffer_size < size):
+                buffer_size = size
+
+        self.send_buffer = np.empty((buffer_size,), dtype=np.float32)
+        self.rec_buffer = np.copy(self.send_buffer)
+
+    def _sample_observation_task(self):
+        index = self._sample_ts() #sample a trajectory frame
+        self._setup()
+
+        #get weight
+        dev_energy = self.obs_energy[index]
+        for f in self.tar_forces:
+            dev_energy -= f.calc_potentials(self.u)
+
+        buffer_index = 0
+        self.send_buffer[buffer_index] = index
+        buffer_index += 1
+
+        #energy diff
+        self.send_buffer[buffer_index] = dev_energy
+        buffer_index += 1
+
+        #store gradient and observables.
+        self.send_buffer[buffer_index] = self.obs[index]
+        buffer_index += 1
+        #we use the index of 1 here because temp_grad normally stores
+        #an M x 3 gradient for each dimension. There is no direction
+        #though with the potential functional derivative
+        for f in self.tar_forces:
+            gsize = len(f.temp_grad[:,1])
+            self.send_buffer[buffer_index:(buffer_index + gsize)] = self.kt * f.temp_grad[:,1]
+            buffer_index += gsize
+
+        self._teardown()
         
-    def observation_match(self, target_obs = None, obs_sweeps = 25, obs_samples = None, reject_tol = None, do_plots = True):
+    def _observation_match_mpi_step(self, target_obs, do_print = True):
+        comm = MPI.COMM_WORLD
+        size = comm.Get_size()
+        rank = comm.Get_rank()
+        
+        #sample covariances, unweighted
+        self._sample_observation_task()        
+
+        #find minimum, so we know the offset between them
+        #deal with confusing and stupid mpi4py syntax
+        data_send = np.array(self.send_buffer[1], dtype=np.float32)
+        data_receive = np.empty(1, dtype=np.float32)
+        comm.Allreduce([data_send, MPI.FLOAT], [data_receive, MPI.FLOAT], op=MPI.MAX)
+        
+        #now do weighting
+        self.send_buffer[1] = exp((self.send_buffer[1] - data_receive[0]) / self.kt)
+        #reuse data_send to store information about 0-weighted frames
+        data_send = np.array(self.send_buffer[1] < 0.0000001, dtype=np.float32)
+        self.send_buffer[2:] *= self.send_buffer[1]
+
+        self.rec_buffer.fill(0)
+        comm.Reduce([self.send_buffer, MPI.FLOAT], [self.rec_buffer, MPI.FLOAT], op=MPI.SUM)
+        comm.Reduce([data_send, MPI.FLOAT], [data_receive, MPI.FLOAT], op=MPI.SUM)
+
+        #now average results
+        if rank == 0:
+            normalization = self.rec_buffer[1]
+            self.rec_buffer[2:] /= normalization
+            meanobs = self.rec_buffer[2]
+
+        #update results
+        if rank == 0:
+            print "{:<16} {:<16} {:<16} {:<5}/{:<10}" .format(sum(self.obs) / len(self.obs), meanobs, target_obs, int(size - data_receive[0]), size)
+
+
+        #before going further, check if we got enough accepted frames (> 1)
+        if(size - data_receive[0] <= 1):
+            #not close enough :(
+            return False
+            
+
+        self.rec_buffer = comm.bcast(self.rec_buffer)
+
+        #now, the second pass covariance calculation
+        buffer_index = 3
+        for f in self.tar_forces:
+            l = buffer_index
+            r = buffer_index + len(f.temp_grad[:,1])
+            #the rec_buffer contains expected values.
+            self.send_buffer[l:r] = (f.temp_grad[:,1] - self.rec_buffer[l:r]) * (self.obs[int(self.send_buffer[0])] - self.rec_buffer[2])
+            buffer_index = r
+            
+        #reduce the covariances
+        self.rec_buffer.fill(0)
+        comm.Reduce([self.send_buffer, MPI.FLOAT], [self.rec_buffer, MPI.FLOAT], op=MPI.SUM)
+        
+        #normalize them
+        if rank == 0:
+            self.rec_buffer[2:] /= normalization            
+            #These are the new w_gradients
+            #do update
+            buffer_index = 3
+            for f in self.tar_forces:
+                l = buffer_index
+                r = buffer_index + len(f.temp_grad[:,1])
+                grad = self.rec_buffer[l:r]
+                #target comes in here
+                grad = -2 * (meanobs - target_obs) * grad
+
+                #update
+                f.lip += np.square(grad)
+                change = f.eta / np.sqrt(f.lip) * grad
+                f.w = f.w - f.eta / np.sqrt(f.lip) * grad
+                
+                buffer_index = r
+            #pack forces for node 0
+            self._pack_tar_forces()
+    
+        #now we update w for everyone by sending the packed node 0 forces
+        self.rec_buffer = comm.bcast(self.send_buffer)
+        self._unpack_tar_forces()
+                
+        return True
+            
+        
+        
+    
+                            
+    def observation_match_mpi(self, target_obs = None, obs_sweeps = 25, do_plots = True):
         """ Match observations.
         """
+
+        comm = MPI.COMM_WORLD
+        size = comm.Get_size()
+        rank = comm.Get_rank()
+
         
         #check for obs_samples
         try:
@@ -387,17 +524,13 @@ class ForceMatch:
         except AttributeError:
             raise ValueError("Must set observations before calling observation match")  
 
-
         if(target_obs is None):
             try:
                 target_obs = self.target_obs
             except AttributeError:
-                print "Assuming maintainance of observation mean is desired"
+                if(rank == 0):
+                    print "Assuming maintainance of observation mean is desired"
                 target_obs = sum(self.obs) / len(self.obs)
-        if(obs_samples is None):
-            obs_samples = max(5, self.u.trajectory.numframes / obs_sweeps)
-        if(reject_tol is None):
-            reject_tol = obs_samples
                 
         #in case force mathcing is being performed simultaneously,
         #we want to cache any force specific parameters so that we
@@ -405,107 +538,35 @@ class ForceMatch:
         self.swap_match_parameters_cache()
 
 
-        if(self.plot_frequency != -1):
+        do_plots = do_plots and rank == 0
+        if(do_plots):
             self._setup_plot()
 
+        self._setup_obs_buffers()
 
-        #we're going to sample the covariance using importance
-        #sampling. This requires a normalization coefficient, so
-        #we must do multiple random frames
+        if(rank == 0):
+            print "{:<16} {:<16} {:<16} {:<16}" .format("observed" , "reweighted", "target", "acceptance")
 
-        s_grads = {} #this is to store the sampled gradients. Key is Force and Value is gradient
-        for f in self.tar_forces:
-            s_grads[f] = [None for x in range(obs_samples)]
-        s_obs = [0 for x in range(obs_samples)] #this is to store the sampled observations
-        s_weights = [0 for x in range(obs_samples)]
-            
         for s in range(obs_sweeps):
 
-            self.force_match_calls += 1
-
             #make plots
-            if(self.plot_frequency != -1 and self.force_match_calls % self.plot_frequency == 0):
+            if(do_plots and rank == 0):
                 self._plot_forces()
-
-
-            #now we esimtate gradient of the loss function via importance sampling
-            normalization = 0
-                
-            #note, this reading method is so slow. I should implement the frame jump in xyz
-            rejects = 0
-            i = 0
-
-            while i < obs_samples:
-
-                index = self._sample_ts() #sample a trajectory frame
-                self._setup()
-
-                 #get weight
-                dev_energy = self.obs_energy[index]
-                for f in self.tar_forces:
-                    dev_energy -= f.calc_potentials(self.u)
-                                            
-                if(abs(dev_energy /self.kt) > 250):
-                    print "0",
-                    rejects += 1
-                    if(rejects == reject_tol):
-                        print "Rejection rate of frames is too high, restarting force matching"
-                        self._teardown()
-                        self.swap_match_parameters_cache()
-                        self.force_match(rejects) #arbitrarily using number of rejects for number matces to use
-                        self.swap_match_parameters_cache()
-                        rejects = 0
-                        continue
-                    else:
-                        self._teardown()
-                        continue
-                else:
-                    print "1",
-
-                weight = exp(dev_energy / self.kt)
-                s_weights[i] = weight
-                normalization += weight
-
-                #store gradient and observabels
-                s_obs[i] = weight * self.obs[i]
-                #we use the index of 1 here because temp_grad normally stores an M x 3 gradient for each dimension. There
-                #is no direction though with the potential functional derivative
-                for f in self.tar_forces:
-                    s_grads[f][i] = self.kt * weight * np.copy(f.temp_grad[:,1])
-
-                i += 1
+            
+            if(not self._observation_match_mpi_step(target_obs)):
+                if(rank == 0):
+                    print "Rejection rate of frames is too high, restarting force matching"
                 self._teardown()
-
-            #At this point, we have the ratios of probabilties under the new vs old potentials along with the observation at each point and potential functional derivative (`temp_grad') 
-            #Now we use these weights to actually caclulate the covariance.
-            for f in self.tar_forces:
-                f.w_grad.fill(0)
-                grad = f.w_grad
-
-                #two-pass covariance calculation, utilizing the temp_grad in f
-                meanobs = sum(s_obs) / normalization
-                meangrad = f.temp_grad[:,2]
-                meangrad.fill(0)
-                for x in s_grads[f]:
-                    meangrad += x  / normalization
-                for x,y in zip(s_obs, s_grads[f]):
-                    grad += (x - meanobs) * (y - meangrad) / normalization
-
-                #Now the target comes in.
-                grad = -2 * (meanobs - target_obs) * grad
-
-                #Update the lipschitz estimate
-                f.lip += np.square(grad)
-                change = f.eta / np.sqrt(f.lip) * grad
-                f.w = f.w - f.eta / np.sqrt(f.lip) * grad
-
-                print "Obs Mean: %g, reweighted mean: %g, target mean:" % (sum(self.obs) / len(self.obs), meanobs, target_obs)
+                self.swap_match_parameters_cache()
+                self.force_match_mpi(frame_number = size, do_plots=False, quiet=True)
+                self.swap_match_parameters_cache()
+                continue
 
              #make plots
-            if(self.plot_frequency != -1):
+            if(do_plots):
                 self._plot_forces()
 
-        if(self.plot_frequency != -1):
+        if(do_plots):
             self._teardown_plot()
 
 
@@ -616,7 +677,7 @@ class ForceMatch:
                 with open("{}.txt".format(rf.short_name), 'w') as f:
                     rf.write_table(f, force_conversion, energy_conversion, distance_conversion, table_points)
             import pickle
-            pickle.dump(self, 'restart.pickle', pickle.HIGHEST_PROTOCOL)
+            pickle.dump(self, open('restart.pickle', 'wb'))
         except (IOError,AttributeError) as e:
             print e
         finally:

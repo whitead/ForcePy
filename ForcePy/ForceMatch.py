@@ -167,7 +167,7 @@ class ForceMatch:
             self._setup()
             energy = 0
             for f in self.tar_forces:
-                energy += f.calc_potential(self.u)
+                energy += f.calc_potentials(self.u)
             self.send_buffer[i - batch[rank]] = i#energy
             self._teardown()
 

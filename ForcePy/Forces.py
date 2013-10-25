@@ -2,6 +2,7 @@ from ForcePy.ForceCategories import Pairwise, Bond, Angle, Dihedral
 from ForcePy.Mesh import UniformMesh 
 from ForcePy.Util import norm3, spec_force_inner_loop, min_img_vec
 from ForcePy.States import State_Mask
+from ForcePy.Basis import UnitStep
 
 import numpy as np
 import random
@@ -260,9 +261,6 @@ class Force(object):
 
         for i in range(len(rvals)):
             outfile.write("%d %f %f %f\n" % (i+1, dist_conv * rvals[i], energy_conv * potential[i], force_conv * force[i]))
-
-
-
 
     @property
     def name(self):
@@ -636,6 +634,38 @@ class SpectralForce(Force):
         #if this is an updatable force, set up stuff for it
         self._setup_update_params(len(mesh))
 
+    @staticmethod
+    def load_lammps_table(lammps_file, category, label, force_conversion=1., eta=None):
+        """ Build a spectral force with a uniform mesh and a unit step
+        basis from a lammps table. The lable is the lammps label that
+        comes before the information about the table size.
+        """
+        with open(lammps_file) as f:            
+            #read until the label
+            while(not f.readline().startswith(label)):
+                pass            
+            #get info to build mesh
+            info = f.readline().split()
+            (points, left, right) = (float(info[1]), float(info[3]), float(info[4]))
+            mesh = UniformMesh(left, right, (right - left) / points)
+            force = SpectralForce(category, mesh, UnitStep)
+
+            
+            i = 0
+            for l in f:
+                if(len(l) < 2):
+                    continue                
+                assert (mesh[i] - float(l.split()[1])) < 0.00001, "Mesh not matching lammps table" 
+                force.w[i] = float(l.split()[3])
+                i += 1
+
+            if(eta):
+                force.eta = eta
+            else:
+                force.eta = np.mean(abs(force.w)) / 100. #only a 1% change is allowed.
+            
+        return force
+            
      
     @property
     def mind(self):

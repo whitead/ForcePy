@@ -166,12 +166,12 @@ class ForceMatch:
             index = 0
             while(index * size * batch_size < frame_number * repeats):
                 try:
-                    self._distribute_tasks(batch_size, index * batch_size, quiet=quiet, frame_number=frame_number)
+                    self._distribute_fm_tasks(batch_size, index * batch_size, quiet=quiet, frame_number=frame_number)
                 except (EOFError, IOError):
                     #just finished reading the file, eat the exception. Will be rewound in force_match_task
                     pass
 
-                self._reduce_tasks()
+                self._reduce_fm_tasks()
                 index +=1
                 if(rank == 0 and not quiet):
                     print "%d / %d iterations" % (index * size * batch_size, frame_number * repeats)  
@@ -181,12 +181,12 @@ class ForceMatch:
         else:
             for i in range(repeats):
                 try:
-                    self._distribute_tasks(quiet=quiet, frame_number=frame_number)
+                    self._distribute_fm_tasks(quiet=quiet, frame_number=frame_number)
                 except (EOFError, IOError):
                     #just finished reading the file, eat the exception. Will be rewound in force_match_task                    
                     pass
                     
-                self._reduce_tasks()
+                self._reduce_fm_tasks()
                 if(rank == 0 and not quiet):
                     print "%d / %d iterations" % (i+1, repeats)  
                     if(do_plots):                    
@@ -334,7 +334,7 @@ class ForceMatch:
             f.w[:] = self.rec_buffer[index:(index + len(f.w))]
             index += len(f.w)
 
-    def _reduce_tasks(self):
+    def _reduce_fm_tasks(self):
 
         self._pack_tar_forces()
         
@@ -355,7 +355,7 @@ class ForceMatch:
         
         self._unpack_tar_forces()
 
-    def _distribute_tasks(self, batch_size = None, offset = 0, quiet=False, frame_number = 0):
+    def _distribute_fm_tasks(self, batch_size = None, offset = 0, quiet=False, frame_number = 0):
         comm = MPI.COMM_WORLD
         size = comm.Get_size()
         rank = comm.Get_rank()
@@ -375,6 +375,7 @@ class ForceMatch:
                 self._force_match_task(rank * (span + 1), (rank + 1) * (span + 1), rank == 0 and not quiet)
             else:
                 self._force_match_task(rank * span + spanr, (rank + 1) * span + spanr, rank == 0 and not quiet)
+    
         
     def observation_match(self, target_obs = None, obs_sweeps = 25, obs_samples = None, reject_tol = None, do_plots = True):
         """ Match observations.
@@ -417,25 +418,15 @@ class ForceMatch:
             s_grads[f] = [None for x in range(obs_samples)]
         s_obs = [0 for x in range(obs_samples)] #this is to store the sampled observations
         s_weights = [0 for x in range(obs_samples)]
-
-        if(self.plot_output is None):
-            plt.ion()                        
-            #set-up plots for 16/9 screen
-        plot_w = ceil(sqrt(len(self.tar_forces)) * 4 / 3.)
-        plot_h = ceil(plot_w * 9. / 16.)
-        for i in range(len(self.tar_forces)):
-            self.tar_forces[i].plot(plt.subplot(plot_w, plot_h, i+1))
-        plt.show()
-
             
         for s in range(obs_sweeps):
 
             self.force_match_calls += 1
+
             #make plots
-            for f in self.tar_forces:
-                for f in self.tar_forces:
-                    f.update_plot()
-                plt.draw()
+            if(self.plot_frequency != -1 and self.force_match_calls % self.plot_frequency == 0):
+                self._plot_forces()
+
 
             #now we esimtate gradient of the loss function via importance sampling
             normalization = 0
@@ -455,6 +446,7 @@ class ForceMatch:
                     dev_energy -= f.calc_potentials(self.u)
                                             
                 if(abs(dev_energy /self.kt) > 250):
+                    print "0",
                     rejects += 1
                     if(rejects == reject_tol):
                         print "Rejection rate of frames is too high, restarting force matching"
@@ -467,6 +459,8 @@ class ForceMatch:
                     else:
                         self._teardown()
                         continue
+                else:
+                    print "1",
 
                 weight = exp(dev_energy / self.kt)
                 s_weights[i] = weight

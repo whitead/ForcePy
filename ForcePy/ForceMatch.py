@@ -558,7 +558,7 @@ class ForceMatch:
                     print "Rejection rate of frames is too high, restarting force matching"
                 self._teardown()
                 self.swap_match_parameters_cache()
-                self.force_match_mpi(frame_number = size, do_plots=False, quiet=True)
+                self.force_match_mpi(frame_number = size, do_plots=False, quiet=False)
                 self.swap_match_parameters_cache()
                 continue
 
@@ -830,7 +830,7 @@ class ForceMatch:
         return type_count
 
         
-    def write_lammps_scripts(self, prefix='cg', folder = os.curdir, lammps_units="real", table_points=10000, lammps_input_file=None, force_conversion = -1.0, energy_conversion=None):
+    def write_lammps_scripts(self, prefix='cg', folder = os.curdir, lammps_units="real", table_points=10000, lammps_input_file=None, force_conversion = 1.0, energy_conversion=None):
         """Using the given ForceMatch and Universe object, this will create a set of input files for Lammps.
     
         The function will create the given folder and put all files

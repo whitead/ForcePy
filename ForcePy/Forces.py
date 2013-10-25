@@ -656,7 +656,7 @@ class SpectralForce(Force):
                 if(len(l) < 2):
                     continue                
                 assert (mesh[i] - float(l.split()[1])) < 0.00001, "Mesh not matching lammps table" 
-                force.w[i] = float(l.split()[3])
+                force.w[i] = force_conversion * float(l.split()[3])
                 i += 1
 
             if(eta):

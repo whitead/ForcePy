@@ -143,6 +143,43 @@ class ForceMatch:
             self.cache = {}
             for f in self.tar_forces:
                 self.cache[f] = np.copy(f.lip)
+
+    def output_energies_mpi(self):
+        '''This is for assesing the energy overlap between the given energies and the ones coming out of the force-matching
+        '''
+        
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        size = comm.Get_size()
+
+        batch = range(0,len(self.u.trajectory), int(math.floor(len(self.u.trajectory) / size)))
+        
+        self.u.trajectory.rewind()
+        
+        for i in range(batch[rank]):
+            self.u.trajectory.next()
+        #build buffer
+        if(not self.send_buffer or len(self.send_buffer) != (batch[1] - batch[0])):
+            self.rec_buffer = np.empty(batch[1] - batch[0], dtype=np.float32)            
+
+        for i in range(batch[rank], batch[rank + 1]):
+            self.u.trajectory.next()
+            self._setup()
+            energy = 0
+            for f in self.tar_forces:
+                energy += f.calc_potential(self.u)
+            self.send_buffer[i - batch[rank]] = i#energy
+            self._teardown()
+
+        if(not self.rec_buffer and len(self.rec_buffer) < len(self.u.trajectry)):
+            self.rec_buffer = np.empty(len(self.u.trajectory), dtype=np.float32)
+        self.rec_buffer =  comm.gather(self.send_buffer)
+        print self.rec_buffer
+    
+        #clear buffers 
+        self.send_buffer = self.rec_buffer = None
+        
+
                                 
     def force_match_mpi(self, batch_size = None, do_plots = False, repeats = 1, frame_number=0, quiet=False):
         
@@ -196,7 +233,6 @@ class ForceMatch:
             if(do_plots):
                 self._teardown_plot()
 
-        
 
     def force_match(self, iterations = 0):
 

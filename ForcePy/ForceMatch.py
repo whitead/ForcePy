@@ -670,6 +670,16 @@ class ForceMatch:
             
     def write(self, folder = os.curdir, table_points=10000, force_conversion = 1.0, energy_conversion=1, distance_conversion=1):
 
+        
+        if(mpi_support):
+            #check if we're running with MPI
+            comm = MPI.COMM_WORLD
+            rank = comm.Get_rank()
+
+            if(rank != 0):
+                return
+        
+
         if(not os.path.exists(folder)):
             os.mkdir(folder)
         original_dir = os.path.abspath(os.getcwd())
@@ -690,6 +700,14 @@ class ForceMatch:
 
 
     def write_lammps_tables(self, prefix, force_conv=1, energy_conv=1, dist_conv=1, points=1000):
+
+        if(mpi_support):
+            #check if we're running with MPI
+            comm = MPI.COMM_WORLD
+            rank = comm.Get_rank()
+
+            if(rank != 0):
+                return
         
         print "conversion = %g" % force_conv
         

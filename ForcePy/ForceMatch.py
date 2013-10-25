@@ -444,8 +444,8 @@ class ForceMatch:
 
 
         #before going further, check if we got enough accepted frames (> 1)
-        if(size - data_receive[0] <= 1):
-            #not close enough :(
+        if(size - data_receive[0] <= 3):
+            #not close enough
             return False            
 
 

@@ -160,7 +160,7 @@ class ForceMatch:
             self.u.trajectory.next()
         #build buffer
         if(not self.send_buffer or len(self.send_buffer) != (batch[1] - batch[0])):
-            self.rec_buffer = np.empty(batch[1] - batch[0], dtype=np.float32)            
+            self.send_buffer = np.empty(batch[1] - batch[0], dtype=np.float32)            
 
         for i in range(batch[rank], batch[rank + 1]):
             self.u.trajectory.next()

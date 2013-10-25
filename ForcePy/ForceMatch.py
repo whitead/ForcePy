@@ -93,7 +93,7 @@ class ForceMatch:
         del odict['u']
         
         if(type(self.u ) == CGUniverse):
-            raise ValueError("Cannot pickle a CGUniverse. cache() must be called on it to convert to Universe")
+            self.u = self.u.cache()
         
         #store the filename and trajectory of the universe
         odict['structure_filename'] = self.u.filename
@@ -109,6 +109,12 @@ class ForceMatch:
         self.u = Universe(dict['structure_filename'], dict['trajectory_filename'])
         apply_mass_map(self.u, dict['mass_map'])
         self.u.trajectory.periodic = dict['trajectory_is_periodic']
+        for f in self.tar_forces + self.ref_forces:
+            cat = f.get_category()
+            if(not (cat is None)):
+                self.ref_cats.append(cat)
+            f.setup_hook(self.u)
+
 
         
 
@@ -512,6 +518,8 @@ class ForceMatch:
 
     def _teardown_plot(self):
         plt.close()
+        for f in self.tar_forces:
+            f.teardown_plot()
 
     def _setup_plot(self):
 

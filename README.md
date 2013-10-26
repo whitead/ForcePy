@@ -11,55 +11,6 @@ Copyright 2013
 
 This code is provided as a preview of an upcoming licensed and peer-reviewed/published version. It is currently unlicensed, meaning modification, distribution, sublicensing and commercial use are forbidden.
 
-
-Installing ForcePy
-===============
-
-Dependencies
-----------
-
-* Python2.7
-* scipy/numpy
-* MDAnalysis (development branch)
-
-Optional Dependencies
-----------
-
-* MPI4Py (for parallel force-matching)
-* matplotlib (for plotting)
-
-Install
-----------
-
-First install the development branch of MDAnalysis
-
-```sh
-git clone https://code.google.com/p/mdanalysis/ mdanalysis
-cd mdanalysis
-git checkout develop
-cd package
-python setup.py install --user
-```
-    
-Next install ForcePy
-
-```sh     
-cd ../../
-git clone https://github.com/whitead/ForcePy.git ForcePy
-cd ForcePy
-python setup.py install --user
-```
-
-If you see a long list of errors, check the first few. If it says it
-can't find `arrayobject.h`, then your numpy headers are not being
-found. If you're in the Voth group and using the Enthought python
-distribution, try adding this line to your `~/.profile` or
-`~/.bash_profile` file:
-
-```bash
-export C_INCLUDE_PATH=/opt/local/include:/Library/Frameworks/EPD64.framework/Versions/7.2/lib/python2.7/site-packages/numpy/core/include:$C_INCLUDE_PATH
-```
-
 Example 1: Coarse-graining a Trajectory of Water
 ==========
 
@@ -275,6 +226,56 @@ Finally, to write out the a set of lammps scripts to use the new force field, ru
 ```python    
 fm.write_lammps_scripts()
 ```
+  
+
+Installing ForcePy
+===============
+
+Dependencies
+----------
+
+* Python2.7
+* scipy/numpy
+* MDAnalysis (development branch)
+
+Optional Dependencies
+----------
+
+* MPI4Py (for parallel force-matching)
+* matplotlib (for plotting)
+
+Install
+----------
+
+First install the development branch of MDAnalysis
+
+```sh
+git clone https://code.google.com/p/mdanalysis/ mdanalysis
+cd mdanalysis
+git checkout develop
+cd package
+python setup.py install --user
+```
+    
+Next install ForcePy
+
+```sh     
+cd ../../
+git clone https://github.com/whitead/ForcePy.git ForcePy
+cd ForcePy
+python setup.py install --user
+```
+
+If you see a long list of errors, check the first few. If it says it
+can't find `arrayobject.h`, then your numpy headers are not being
+found. If you're in the Voth group and using the Enthought python
+distribution, try adding this line to your `~/.profile` or
+`~/.bash_profile` file:
+
+```bash
+export C_INCLUDE_PATH=/opt/local/include:/Library/Frameworks/EPD64.framework/Versions/7.2/lib/python2.7/site-packages/numpy/core/include:$C_INCLUDE_PATH
+```
+
   
 Architecture Notes
 ==================

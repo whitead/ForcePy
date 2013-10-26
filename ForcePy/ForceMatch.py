@@ -144,7 +144,7 @@ class ForceMatch:
             for f in self.tar_forces:
                 self.cache[f] = np.copy(f.lip)
 
-    def output_energies_mpi(self):
+    def output_energies_mpi(self, outfile):
         '''This is for assesing the energy overlap between the given energies and the ones coming out of the force-matching
         '''
         
@@ -159,7 +159,7 @@ class ForceMatch:
         for i in range(batch[rank]):
             self.u.trajectory.next()
         #build buffer
-        if(not self.send_buffer or len(self.send_buffer) != (batch[1] - batch[0])):
+        if(self.send_buffer is None or len(self.send_buffer) != (batch[1] - batch[0])):
             self.send_buffer = np.empty(batch[1] - batch[0], dtype=np.float32)            
 
         for i in range(batch[rank], batch[rank + 1]):
@@ -168,13 +168,18 @@ class ForceMatch:
             energy = 0
             for f in self.tar_forces:
                 energy += f.calc_potentials(self.u)
-            self.send_buffer[i - batch[rank]] = i#energy
+            self.send_buffer[i - batch[rank]] = energy
             self._teardown()
 
-        if(not self.rec_buffer or len(self.rec_buffer) < len(self.u.trajectry)):
+        if(self.rec_buffer is None or len(self.rec_buffer) < len(self.u.trajectry)):
             self.rec_buffer = np.empty(len(self.u.trajectory), dtype=np.float32)
-        self.rec_buffer =  comm.gather(self.send_buffer)
-        print self.rec_buffer
+        comm.gather([self.send_buffer, MPI.FLOAT], [self.rec_buffer, MPI.FLOAT])
+
+        if rank == 0:
+            with open(outfile, 'w') as f:
+                f.write('{:<16} {:<16} {:<16}\n'.format('frame', 'est pot', 'true pot'))
+                for i,e in enumerate(self.rec_buffer):
+                    f.write('{:<16} {:<16} {:<16}\n'.format(i,e,self.obs_energy[i]))
     
         #clear buffers 
         self.send_buffer = self.rec_buffer = None

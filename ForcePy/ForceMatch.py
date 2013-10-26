@@ -171,7 +171,7 @@ class ForceMatch:
             self.send_buffer[i - batch[rank]] = energy
             self._teardown()
 
-        if(self.rec_buffer is None or len(self.rec_buffer) < len(self.u.trajectry)):
+        if(self.rec_buffer is None or len(self.rec_buffer) < len(self.u.trajectory)):
             self.rec_buffer = np.empty(len(self.u.trajectory), dtype=np.float32)
         comm.gather([self.send_buffer, MPI.FLOAT], [self.rec_buffer, MPI.FLOAT])
 

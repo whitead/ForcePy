@@ -308,36 +308,19 @@ possible pairs. `add_and_type_pairs` copies a force as many times as
 needed to have a unique force for every possible pair-pair
 interaction.
 
-Observable Variable
-===============
-
-*Under Construction*
-
-The target forcefield/potential may be modified to reproduce some
-observable parameter.  The observable should be in a tabular file
-containing the total energy of the system at each frame in Column
-1. Columns 2 and beyond should be the deviation of the observable. The
-algorithm will try to minimize the observable. The observable under
-the new forcefied will be sum_i O_i * exp(-(U' - U) * beta), where U'
-is the new potential. The gradient at each frame will be -beta * U' *
-exp(-(U' - U) * beta). The meshes implment integrated forms for
-working with potentials. This gradient, by the way, depends on the
-current potential correct since the derivative of the normalization
-constant changes.
-
 
 Meshes
-============
+------------
 * Uniform mesh
 
 Basis functions
-=============
+------------
 * UnitStep
 * Quartic
 * Gaussian
 
 Forces
-=========
+------------
 * FileForce
 * LammpsFileForce
 * SpectralPairwiseForce
@@ -346,7 +329,7 @@ Forces
 * FixedHarmonicForce
 
 Regularizers
-==========
+------------
 * SmoothRegularizer
 * L2Regularizer
 

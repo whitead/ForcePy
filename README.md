@@ -7,58 +7,9 @@ Can be used independently for topology reduction in coarse-graining.
 
 ## License
 
-Copyright 2013 Andrew White
+Copyright 2013
 
 This code is provided as a preview of an upcoming licensed and peer-reviewed/published version. It is currently unlicensed, meaning modification, distribution, sublicensing and commercial use are forbidden.
-The unmodified code may be used for private and non-commercial use.
-
-Installing ForcePy
-===============
-
-Dependencies
-----------
-
-* Python2.7
-* scipy/numpy
-* MDAnalysis (development branch)
-
-Optional Dependencies
-----------
-
-* MPI4Py (for parallel force-matching)
-* matplotlib (for plotting)
-
-Install
-----------
-
-First install the development branch of MDAnalysis
-
-```sh
-git clone https://code.google.com/p/mdanalysis/ mdanalysis
-cd mdanalysis
-git checkout develop
-cd package
-python setup.py install --user
-```
-    
-Next install ForcePy
-
-```sh     
-cd ../../
-git clone https://github.com/whitead/ForcePy.git ForcePy
-cd ForcePy
-python setup.py install --user
-```
-
-If you see a long list of errors, check the first few. If it says it
-can't find `arrayobject.h`, then your numpy headers are not being
-found. If you're in the Voth group and using the Enthought python
-distribution, try adding this line to your `~/.profile` or
-`~/.bash_profile` file:
-
-```bash
-export C_INCLUDE_PATH=/opt/local/include:/Library/Frameworks/EPD64.framework/Versions/7.2/lib/python2.7/site-packages/numpy/core/include:$C_INCLUDE_PATH
-```
 
 Example 1: Coarse-graining a Trajectory of Water
 ==========
@@ -276,6 +227,56 @@ Finally, to write out the a set of lammps scripts to use the new force field, ru
 fm.write_lammps_scripts()
 ```
   
+
+Installing ForcePy
+===============
+
+Dependencies
+----------
+
+* Python2.7
+* scipy/numpy
+* MDAnalysis (development branch)
+
+Optional Dependencies
+----------
+
+* MPI4Py (for parallel force-matching)
+* matplotlib (for plotting)
+
+Install
+----------
+
+First install the development branch of MDAnalysis
+
+```sh
+git clone https://code.google.com/p/mdanalysis/ mdanalysis
+cd mdanalysis
+git checkout develop
+cd package
+python setup.py install --user
+```
+    
+Next install ForcePy
+
+```sh     
+cd ../../
+git clone https://github.com/whitead/ForcePy.git ForcePy
+cd ForcePy
+python setup.py install --user
+```
+
+If you see a long list of errors, check the first few. If it says it
+can't find `arrayobject.h`, then your numpy headers are not being
+found. If you're in the Voth group and using the Enthought python
+distribution, try adding this line to your `~/.profile` or
+`~/.bash_profile` file:
+
+```bash
+export C_INCLUDE_PATH=/opt/local/include:/Library/Frameworks/EPD64.framework/Versions/7.2/lib/python2.7/site-packages/numpy/core/include:$C_INCLUDE_PATH
+```
+
+  
 Architecture Notes
 ==================
 
@@ -308,36 +309,19 @@ possible pairs. `add_and_type_pairs` copies a force as many times as
 needed to have a unique force for every possible pair-pair
 interaction.
 
-Observable Variable
-===============
-
-*Under Construction*
-
-The target forcefield/potential may be modified to reproduce some
-observable parameter.  The observable should be in a tabular file
-containing the total energy of the system at each frame in Column
-1. Columns 2 and beyond should be the deviation of the observable. The
-algorithm will try to minimize the observable. The observable under
-the new forcefied will be sum_i O_i * exp(-(U' - U) * beta), where U'
-is the new potential. The gradient at each frame will be -beta * U' *
-exp(-(U' - U) * beta). The meshes implment integrated forms for
-working with potentials. This gradient, by the way, depends on the
-current potential correct since the derivative of the normalization
-constant changes.
-
 
 Meshes
-============
+------------
 * Uniform mesh
 
 Basis functions
-=============
+------------
 * UnitStep
 * Quartic
 * Gaussian
 
 Forces
-=========
+------------
 * FileForce
 * LammpsFileForce
 * SpectralPairwiseForce
@@ -346,7 +330,7 @@ Forces
 * FixedHarmonicForce
 
 Regularizers
-==========
+------------
 * SmoothRegularizer
 * L2Regularizer
 

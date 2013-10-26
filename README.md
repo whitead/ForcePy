@@ -7,10 +7,10 @@ Can be used independently for topology reduction in coarse-graining.
 
 ## License
 
-Copyright 2013 Andrew White
+Copyright 2013
 
 This code is provided as a preview of an upcoming licensed and peer-reviewed/published version. It is currently unlicensed, meaning modification, distribution, sublicensing and commercial use are forbidden.
-The unmodified code may be used for private and non-commercial use.
+
 
 Installing ForcePy
 ===============

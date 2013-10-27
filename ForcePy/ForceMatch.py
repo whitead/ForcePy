@@ -55,22 +55,20 @@ class ForceMatch:
 
         if("observable" in self.json):
             self._test_json(self.json, [('kT', 'Boltzmann\'s constant times temperature'), 
-                                        ('observable', 'File containing two columns where the number of rows is equal to frames. First column is total potential energy and second is observable')])
+                                        ('observable', 'File containing one column where the number of rows is equal to frames. First column is total potential energy')])
 
             self.kt = self.json['kT']
             assert type(self.kt) == type(0.), 'kT must be a floating point number'
 
             self.do_obs = True
             self.obs = [0 for x in range(self.u.trajectory.numframes)]
-            self.obs_energy = [0 for x in range(self.u.trajectory.numframes)]
             with open(self.json['observable'], 'r') as f:
                 lines = f.readlines()
                 if(len(lines) < len(self.obs)):
                     raise IOError('Number of the frames (%d) does not match number of lines in observation file (%d)' %
                                   (len(self.obs), len(lines)))
                 for i, line in zip(range(len(self.obs)), lines[:len(self.obs)]):
-                    self.obs_energy[i] = float(line.split()[0])
-                    self.obs[i] = float(line.split()[1])
+                    self.obs[i] = float(line.split()[0])
 
             if('target_observable' in self.json):
                 self.target_obs = self.json['target_observables']
@@ -145,7 +143,7 @@ class ForceMatch:
                 self.cache[f] = np.copy(f.lip)
 
     def output_energies_mpi(self, outfile):
-        '''This is for assesing the energy overlap between the given energies and the ones coming out of the force-matching
+        '''This is for assesing the energy coming out of the force-matching
         '''
         
         comm = MPI.COMM_WORLD
@@ -177,12 +175,12 @@ class ForceMatch:
 
         if rank == 0:
             with open(outfile, 'w') as f:
-                f.write('{:<16} {:<16} {:<16}\n'.format('frame', 'est pot', 'true pot'))
+                f.write('{:<16} {:<16} {:<16}\n'.format('frame', 'pot'))
                 for i,e in enumerate(self.rec_buffer):
                     #buffer might be larger from another use
-                    if(i == len(self.obs_energy)):
+                    if(i == len(self.u.trajectory)):
                         break
-                    f.write('{:<16} {:<16} {:<16}\n'.format(i,e,self.obs_energy[i]))
+                    f.write('{:<16} {:<16}\n'.format(i,e))
     
         #clear buffers 
         self.send_buffer = self.rec_buffer = None

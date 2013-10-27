@@ -179,6 +179,9 @@ class ForceMatch:
             with open(outfile, 'w') as f:
                 f.write('{:<16} {:<16} {:<16}\n'.format('frame', 'est pot', 'true pot'))
                 for i,e in enumerate(self.rec_buffer):
+                    #buffer might be larger from another use
+                    if(i == len(self.obs_energy)):
+                        break
                     f.write('{:<16} {:<16} {:<16}\n'.format(i,e,self.obs_energy[i]))
     
         #clear buffers 

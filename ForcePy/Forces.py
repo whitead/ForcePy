@@ -23,7 +23,7 @@ class Force(object):
         self.mask2 = None
 
     
-    def _setup_update_params(self, w_dim, initial_w=1, eta=None, hard_pow=12):
+    def _setup_update_params(self, w_dim, initial_w=100, eta=None, hard_pow=12):
         """ Assumes a line from given initial height down to zero. Basically repulsive force
         """
         self.eta = eta
@@ -621,7 +621,7 @@ class SpectralForce(Force):
     defined as so: def unit_step(x, mesh, height).
     """
     
-    def __init__(self, category, mesh, basis):
+    def __init__(self, category, mesh, basis, initial_w=0):
         super(SpectralForce, self).__init__()
         self.basis = basis
         self.mesh = mesh
@@ -632,7 +632,7 @@ class SpectralForce(Force):
         self._short_name = "SF_%s" % category.__name__
 
         #if this is an updatable force, set up stuff for it
-        self._setup_update_params(len(mesh))
+        self._setup_update_params(len(mesh), initial_w=initial_w)
 
     @staticmethod
     def load_lammps_table(lammps_file, category, label, force_conversion=1., eta=None):

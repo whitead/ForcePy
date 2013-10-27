@@ -907,6 +907,15 @@ class ForceMatch:
         loads the force fields. The given lammps input file will be appended 
         to the input script.
         """
+        if(mpi_support):
+            #check if we're running with MPI
+            comm = MPI.COMM_WORLD
+            rank = comm.Get_rank()
+
+            if(rank != 0):
+                return
+                
+
         #before we change directories, we need to get the path of the lammps input file 
         if(lammps_input_file is not None):
             lammps_input_file = os.path.abspath(lammps_input_file)

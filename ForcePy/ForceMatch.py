@@ -440,7 +440,7 @@ class ForceMatch:
         self._setup()
 
         #get weight
-        dev_energy = self.obs_energy[index]
+        dev_energy = 0
         for f in self.tar_forces:
             dev_energy -= f.calc_potentials(self.u)
 
@@ -478,18 +478,22 @@ class ForceMatch:
         data_send = np.array(self.send_buffer[1], dtype=np.float32)
         data_receive = np.empty(1, dtype=np.float32)
         comm.Allreduce([data_send, MPI.FLOAT], [data_receive, MPI.FLOAT], op=MPI.MAX)
+
         
         #now do weighting
         self.send_buffer[1] = exp((self.send_buffer[1] - data_receive[0]) / self.kt)
         #reuse data_send to store information about 0-weighted frames
         data_send = np.array(self.send_buffer[1] < 0.0000001, dtype=np.float32)
-
         comm.Allreduce([data_send, MPI.FLOAT], [data_receive, MPI.FLOAT], op=MPI.SUM)
 
 
         #before going further, check if we got enough accepted frames (> 1)
         if(size - data_receive[0] <= 3):
             #not close enough
+            #update results
+            if rank == 0:
+                print "{:<16} {:<16} {:<16} {:<5}/{:<10}" .format(sum(self.obs) / len(self.obs), 'NA', target_obs, int(size - data_receive[0]), size)
+
             return False            
 
 
@@ -600,13 +604,13 @@ class ForceMatch:
                 self._plot_forces()
             
             if(not self._observation_match_mpi_step(target_obs)):
-                if(rank == 0):
-                    print "Rejection rate of frames is too high, restarting force matching"
+#                if(rank == 0):
+#                    print "Rejection rate of frames is too high, restarting force matching"
                 self.swap_match_parameters_cache()
-                self.force_match_mpi(frame_number = size, do_plots=False, quiet=False)
+                self.force_match_mpi(do_plots=False, quiet=True)
                 self.swap_match_parameters_cache()
-                if(rank == 0):
-                    print "{:<16} {:<16} {:<16} {:<16}" .format("observed" , "reweighted", "target", "acceptance")
+#                if(rank == 0):
+#                    print "{:<16} {:<16} {:<16} {:<16}" .format("observed" , "reweighted", "target", "acceptance")
                 continue
 
              #make plots

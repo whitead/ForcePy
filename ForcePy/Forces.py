@@ -678,7 +678,7 @@ class SpectralForce(Force):
         return self.mesh.max()
         
     def clone_force(self):
-        copy = SpectralForce(self.category.__class__, self.mesh, self.basis)
+        copy = SpectralForce(self.category.__class__, self.mesh, self.basis, initial_w=self.w)
         return copy           
 
     def calc_force_array(self, d, forces):

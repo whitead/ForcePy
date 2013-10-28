@@ -549,6 +549,10 @@ class ForceMatch:
                 #target comes in here
                 grad = -2 * (meanobs - target_obs) * grad
 
+                #apply any regularization
+                for r in f.regularization:
+                    grad += r[0](f.w)
+
                 #update
                 f.lip += np.square(grad)
                 change = f.eta / np.sqrt(f.lip) * grad

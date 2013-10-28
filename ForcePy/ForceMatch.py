@@ -181,8 +181,10 @@ class ForceMatch:
                 i = 1
                 for ebatch in rec_buffer:
                     for e in ebatch[0]:
+                        if(i == len(self.u.trajectory)):
+                            break
                         f.write('{:<16} {:<16}\n'.format(i,e))
-                    i += 1
+                        i += 1
     
         #clear buffers 
         self.send_buffer = self.rec_buffer = None

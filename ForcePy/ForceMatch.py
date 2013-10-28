@@ -135,12 +135,11 @@ class ForceMatch:
 
     def swap_match_parameters_cache(self):
         try:
-            for f in self.tar_forces:
-                self.cache[f], f.lip = f.lip, self.cache[f]
+            for c,f in zip(self.cache, self.tar_forces):
+                c,f.eta = f.eta,c
         except AttributeError:
-            self.cache = {}
-            for f in self.tar_forces:
-                self.cache[f] = np.copy(f.lip)
+            self.cache = [f.eta for f in self.tar_forces]
+
 
     def output_energies_mpi(self, outfile):
         '''This is for assesing the energy coming out of the force-matching
@@ -472,7 +471,7 @@ class ForceMatch:
 
         self._teardown()
         
-    def _observation_match_mpi_step(self, target_obs, do_print = True):
+    def _observation_match_mpi_step(self, target_obs, curvature, do_print = True):
         comm = MPI.COMM_WORLD
         size = comm.Get_size()
         rank = comm.Get_rank()
@@ -499,7 +498,7 @@ class ForceMatch:
             #not close enough
             #update results
             if rank == 0:
-                print "{:<16} {:<16} {:<16} {:<5}/{:<10}" .format(sum(self.obs) / len(self.obs), 'NA', target_obs, int(size - data_receive[0]), size)
+                print "{:<16} {:<16} {:<16} {:<16}" .format(sum(self.obs) / len(self.obs), 'NA', target_obs, int(size - data_receive[0]))
 
             return False            
 
@@ -517,7 +516,7 @@ class ForceMatch:
 
         #update results
         if rank == 0:
-            print "{:<16} {:<16} {:<16} {:<5}/{:<10}" .format(sum(self.obs) / len(self.obs), meanobs, target_obs, int(size - data_receive[0]), size)
+            print "{:<16} {:<16} {:<16} {:<16}" .format(sum(self.obs) / len(self.obs), meanobs, target_obs, int(size - data_receive[0]))
 
         self.rec_buffer = comm.bcast(self.rec_buffer)
 
@@ -540,7 +539,7 @@ class ForceMatch:
             #These are the new w_gradients
             #do update
             buffer_index = 3
-            for f in self.tar_forces:
+            for curve, f in zip(curvature, self.tar_forces):
                 l = buffer_index
                 r = buffer_index + len(f.temp_grad[:,1])
                 grad = self.rec_buffer[l:r]
@@ -553,8 +552,7 @@ class ForceMatch:
 
                 #update
                 f.lip += np.square(grad)
-                change = f.eta / np.sqrt(f.lip) * grad
-                f.w = f.w - f.eta / np.sqrt(f.lip) * grad
+                f.w = f.w - f.eta * curve / np.sqrt(f.lip) * grad
                 f.update_avg()                
 
                 buffer_index = r
@@ -571,7 +569,9 @@ class ForceMatch:
         
     
                             
-    def observation_match_mpi(self, target_obs = None, obs_sweeps = 25, do_plots = True):
+    def observation_match_mpi(self, target_obs = None, 
+                              obs_sweeps = 25, do_plots = True,
+                              curve_regularize=True):
         """ Match observations.
         """
 
@@ -594,11 +594,11 @@ class ForceMatch:
                     print "Assuming maintainance of observation mean is desired"
                 target_obs = sum(self.obs) / len(self.obs)
                 
-        #in case force mathcing is being performed simultaneously,
-        #we want to cache any force specific parameters so that we
-        #can swap them back in afterwards
-        self.swap_match_parameters_cache()
-
+        #Move areas only where there exists curvature
+        if(curve_regularize):
+            curvature = [np.power(f.w_avg, 2) for f in self.tar_forces]
+        else:
+            curvature = [np.ones(np.size(f.w_avg), dtype=np.float32) for f in self.tar_forces]
 
         do_plots = do_plots and rank == 0
         if(do_plots):
@@ -615,12 +615,10 @@ class ForceMatch:
             if(do_plots and rank == 0):
                 self._plot_forces()
             
-            while(not self._observation_match_mpi_step(target_obs)):
+            while(not self._observation_match_mpi_step(target_obs, curvature)):
 #                if(rank == 0):
 #                    print "Rejection rate of frames is too high, restarting force matching"
-                self.swap_match_parameters_cache()
                 self.force_match_mpi(do_plots=False, quiet=True)
-                self.swap_match_parameters_cache()
 #                if(rank == 0):
 #                    print "{:<16} {:<16} {:<16} {:<16}" .format("observed" , "reweighted", "target", "acceptance")
 

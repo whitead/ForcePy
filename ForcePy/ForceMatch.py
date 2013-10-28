@@ -169,18 +169,16 @@ class ForceMatch:
             self.send_buffer[i - batch[rank]] = energy
             self._teardown()
 
-        if(self.rec_buffer is None or len(self.rec_buffer) < len(self.u.trajectory)):
-            self.rec_buffer = np.empty(len(self.u.trajectory), dtype=np.float32)
-        comm.gather([self.send_buffer, MPI.FLOAT], [self.rec_buffer, MPI.FLOAT])
+        rec_buffer = comm.gather([self.send_buffer, MPI.FLOAT])
 
         if rank == 0:
             with open(outfile, 'w') as f:
                 f.write('{:<16} {:<16}\n'.format('frame', 'pot'))
-                for i,e in enumerate(self.rec_buffer):
-                    #buffer might be larger from another use
-                    if(i == len(self.u.trajectory)):
-                        break
-                    f.write('{:<16} {:<16}\n'.format(i,e))
+                i = 1
+                for ebatch in rec_buffer:
+                    for e in ebatch[0]:
+                        f.write('{:<16} {:<16}\n'.format(i,e))
+                    i += 1
     
         #clear buffers 
         self.send_buffer = self.rec_buffer = None

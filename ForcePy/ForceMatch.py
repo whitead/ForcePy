@@ -175,7 +175,7 @@ class ForceMatch:
 
         if rank == 0:
             with open(outfile, 'w') as f:
-                f.write('{:<16} {:<16} {:<16}\n'.format('frame', 'pot'))
+                f.write('{:<16} {:<16}\n'.format('frame', 'pot'))
                 for i,e in enumerate(self.rec_buffer):
                     #buffer might be larger from another use
                     if(i == len(self.u.trajectory)):
@@ -288,6 +288,7 @@ class ForceMatch:
                 #now run gradient update step on all the force types
                 for f in self.tar_forces:
                     f.update(df)
+                    f.update_avg()
 
             ref_forces.fill(0)
             self._teardown()
@@ -302,6 +303,15 @@ class ForceMatch:
             self._save_plot()
         if(self.plot_frequency != -1):
             self._teardown_plot()
+
+
+    def finalize(self):
+        '''Call this method before writing to use the average over the force-matching, instead of the last observed weights. This
+           is important when convergence is oscillatory or observation matching is being used.
+        '''
+        
+        for f in self.tar_forces:
+            f.swap_avg()
 
     def _force_match_task(self, start, end, do_print = False):
         ref_forces = np.zeros( (self.u.atoms.numberOfAtoms(), 3) )
@@ -374,6 +384,7 @@ class ForceMatch:
         for f in self.tar_forces:
             f.w[:] = self.rec_buffer[index:(index + len(f.w))]
             index += len(f.w)
+            f.update_avg()
 
     def _reduce_fm_tasks(self):
 
@@ -542,7 +553,8 @@ class ForceMatch:
                 f.lip += np.square(grad)
                 change = f.eta / np.sqrt(f.lip) * grad
                 f.w = f.w - f.eta / np.sqrt(f.lip) * grad
-                
+                f.update_avg()                
+
                 buffer_index = r
             #pack forces for node 0
             self._pack_tar_forces()

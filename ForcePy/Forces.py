@@ -39,6 +39,8 @@ class Force(object):
             if(eta is None):
                 self.eta = max(1, abs(initial_w) * 2)
 
+        self.w_avg = np.copy( self.w )
+        self.avg_count = 0
         self.temp_grad = np.empty( (w_dim, 3) , dtype=np.float32)
         self.temp_force = np.empty( 3 , dtype=np.float32)
         self.w_grad = np.empty( w_dim, dtype=np.float32)
@@ -57,6 +59,14 @@ class Force(object):
         #we should be taking the negative of the dot product
         #but its easier to put the minus sign in this expression
         self.w = self.w + self.eta / np.sqrt(self.lip) * negative_grad
+        
+    def update_avg(self):
+        #update overall average
+        self.avg_count += 1
+        self.w_avg = self.w_avg * (self.avg_count - 1) / (self.avg_count) + self.w / (self.avg_count)
+
+    def swap_avg(self):
+        self.w, self.w_avg = self.w_avg, self.w
 
 
     #In case the force needs access to the universe for setting up, override (and call this method).
@@ -247,8 +257,6 @@ class Force(object):
             outfile.write("N %d RADIANS\n\n" % (len(rvals)))
         for i in range(len(rvals)):
             outfile.write("%d %f %f %f\n" % (i+1, dist_conv * rvals[i], energy_conv * potential[i], force_conv * force[i]))
-        #ATTENTION ATTENTION ATTENTION: This code here uses the lammps way of tabular forces, in that
-        #positive force is repulsive.
                       
     def write_table(self, outfile, force_conv=1., energy_conv=1., dist_conv=1., points=10000):
         outfile.write('#%s\n\n' % self.name)

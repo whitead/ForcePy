@@ -615,7 +615,7 @@ class ForceMatch:
             if(do_plots and rank == 0):
                 self._plot_forces()
             
-            if(not self._observation_match_mpi_step(target_obs)):
+            while(not self._observation_match_mpi_step(target_obs)):
 #                if(rank == 0):
 #                    print "Rejection rate of frames is too high, restarting force matching"
                 self.swap_match_parameters_cache()
@@ -623,7 +623,7 @@ class ForceMatch:
                 self.swap_match_parameters_cache()
 #                if(rank == 0):
 #                    print "{:<16} {:<16} {:<16} {:<16}" .format("observed" , "reweighted", "target", "acceptance")
-                continue
+
 
              #make plots
             if(do_plots):

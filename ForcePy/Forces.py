@@ -638,7 +638,7 @@ class SpectralForce(Force):
         self.category = category.get_instance(mesh.max())
         self._long_name = "SpectralForce for %s" % category.__name__
         self._short_name = "SF_%s" % category.__name__
-
+        
         #if this is an updatable force, set up stuff for it
         self._setup_update_params(len(mesh), initial_w=initial_w)
 
@@ -763,3 +763,11 @@ class SpectralForce(Force):
 
 
 
+def build_repulsion(mesh, end_at, height, power=12):
+    '''Build a repulsive initial guess for force-matching. end_at is units of distance, not the mesh index
+    '''
+    #convert from distance to mesh index
+    end_at = mesh.mesh_index(end_at)
+    result = np.zeros(len(mesh), dtype=np.float32)
+    result[:end_at] = height * (np.power(np.arange( end_at, 0, -1, dtype=np.float32), power) / np.float32(end_at ** power))
+    return result

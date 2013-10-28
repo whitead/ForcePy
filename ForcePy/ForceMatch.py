@@ -149,18 +149,23 @@ class ForceMatch:
         rank = comm.Get_rank()
         size = comm.Get_size()
 
-        batch = range(0,len(self.u.trajectory), int(floor(len(self.u.trajectory) / size)))
+        batch = range(0,len(self.u.trajectory), int(ceil(len(self.u.trajectory) / size)))
         
         self.u.trajectory.rewind()
         
         for i in range(batch[rank]):
             self.u.trajectory.next()
+
         #build buffer
         if(self.send_buffer is None or len(self.send_buffer) != (batch[1] - batch[0])):
             self.send_buffer = np.empty(batch[1] - batch[0], dtype=np.float32)            
 
         for i in range(batch[rank], batch[rank + 1]):
-            self.u.trajectory.next()
+            try:
+                self.u.trajectory.next()
+            except (EOFError, IOError):
+                #finished reading the file
+                break
             self._setup()
             energy = 0
             for f in self.tar_forces:

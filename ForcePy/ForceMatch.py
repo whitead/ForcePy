@@ -149,42 +149,44 @@ class ForceMatch:
         rank = comm.Get_rank()
         size = comm.Get_size()
 
-        batch = range(0,len(self.u.trajectory), int(ceil(float(len(self.u.trajectory)) / size)))
-        
+        #distribute the jobs evenly
+        batch = range(0,len(self.u.trajectory) + 1, int(floor(float(len(self.u.trajectory)) / size)))
+        batch[-1] = len(self.u.trajectory)
+
         self.u.trajectory.rewind()
         
         for i in range(batch[rank]):
             self.u.trajectory.next()
 
         #build buffer
-        if(self.send_buffer is None or len(self.send_buffer) != (batch[1] - batch[0])):
-            self.send_buffer = np.empty(batch[1] - batch[0], dtype=np.float32)            
+        if(self.send_buffer is None or len(self.send_buffer) != (batch[rank + 1] - batch[rank])):
+            self.send_buffer = np.empty(batch[rank + 1] - batch[rank], dtype=np.float32)            
 
         for i in range(batch[rank], batch[rank + 1]):
-            try:
-                self.u.trajectory.next()
-            except (EOFError, IOError):
-                #finished reading the file
-                self._teardown()
-                break
             self._setup()
             energy = 0
             for f in self.tar_forces:
                 energy += f.calc_potentials(self.u)
             self.send_buffer[i - batch[rank]] = energy
             self._teardown()
+            try:
+                self.u.trajectory.next()
+            except (EOFError, IOError):
+                #finished reading the file
+                break
+
 
         rec_buffer = comm.gather([self.send_buffer, MPI.FLOAT])
 
         if rank == 0:
             with open(outfile, 'w') as f:
                 f.write('{:<16} {:<16}\n'.format('frame', 'pot'))
-                i = 1
+                i = 0
                 for ebatch in rec_buffer:
                     for e in ebatch[0]:
                         if(i == len(self.u.trajectory)):
                             break
-                        f.write('{:<16} {:<16}\n'.format(i,e))
+                        f.write('{:<16} {:<16}\n'.format(i+1,e))
                         i += 1
     
         #clear buffers 

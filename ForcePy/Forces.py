@@ -37,7 +37,7 @@ class Force(object):
         except TypeError:
             self.w = initial_w * (np.power(np.arange( w_dim - 1, -1, -1 , dtype=np.float32),hard_pow) / np.float32(w_dim ** hard_pow))
             if(eta is None):
-                self.eta = max(1, abs(initial_w) * 2)
+                self.eta = max(25, abs(initial_w) * 2)
 
         self.w_avg = np.copy( self.w )
         self.avg_count = 0

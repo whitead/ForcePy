@@ -33,7 +33,7 @@ class Force(object):
             else:
                 self.w = np.copy(initial_w)
             if(eta is None):
-                self.eta = max(1, np.median(np.abs(initial_w)) * 2)
+                self.eta = max(25, np.median(np.abs(initial_w)) * 2)
         except TypeError:
             self.w = initial_w * (np.power(np.arange( w_dim - 1, -1, -1 , dtype=np.float32),hard_pow) / np.float32(w_dim ** hard_pow))
             if(eta is None):
@@ -629,7 +629,7 @@ class SpectralForce(Force):
     defined as so: def unit_step(x, mesh, height).
     """
     
-    def __init__(self, category, mesh, basis, initial_w=0):
+    def __init__(self, category, mesh, basis, initial_w=0, w_range=None):
         super(SpectralForce, self).__init__()
         self.basis = basis
         self.mesh = mesh
@@ -640,7 +640,7 @@ class SpectralForce(Force):
         self._short_name = "SF_%s" % category.__name__
         
         #if this is an updatable force, set up stuff for it
-        self._setup_update_params(len(mesh), initial_w=initial_w)
+        self._setup_update_params(len(mesh), initial_w=initial_w, eta=w_range)
 
     @staticmethod
     def load_lammps_table(lammps_file, category, label, force_conversion=1., eta=None):
@@ -686,7 +686,7 @@ class SpectralForce(Force):
         return self.mesh.max()
         
     def clone_force(self):
-        copy = SpectralForce(self.category.__class__, self.mesh, self.basis, initial_w=self.w)
+        copy = SpectralForce(self.category.__class__, self.mesh, self.basis, initial_w=self.w, w_range=self.eta)
         return copy           
 
     def calc_force_array(self, d, forces):

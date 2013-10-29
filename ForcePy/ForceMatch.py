@@ -149,7 +149,7 @@ class ForceMatch:
         rank = comm.Get_rank()
         size = comm.Get_size()
 
-        batch = range(0,len(self.u.trajectory), int(ceil(len(self.u.trajectory) / size)))
+        batch = range(0,len(self.u.trajectory), int(ceil(float(len(self.u.trajectory)) / size)))
         
         self.u.trajectory.rewind()
         
@@ -165,6 +165,7 @@ class ForceMatch:
                 self.u.trajectory.next()
             except (EOFError, IOError):
                 #finished reading the file
+                self._teardown()
                 break
             self._setup()
             energy = 0

@@ -736,7 +736,9 @@ class ForceMatch:
             tfcat._teardown()        
 
             
-    def write(self, folder = os.curdir, table_points=10000, force_conversion = 1.0, energy_conversion=1, distance_conversion=1):
+    def write(self, folder = os.curdir, table_points=10000, 
+                force_conversion = 1.0, energy_conversion=1, distance_conversion=1,
+                write_restart=True):
 
         
         if(mpi_support):
@@ -757,8 +759,9 @@ class ForceMatch:
             for rf in self.tar_forces:
                 with open("{}.txt".format(rf.short_name), 'w') as f:
                     rf.write_table(f, force_conversion, energy_conversion, distance_conversion, table_points)
-            import pickle
-            pickle.dump(self, open('restart.pickle', 'wb'))
+            if(write_restart):
+                import pickle
+                pickle.dump(self, open('restart.pickle', 'wb'))
         except (IOError,AttributeError) as e:
             print e
         finally:

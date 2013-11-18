@@ -300,7 +300,7 @@ class CGReader(base.Reader):
         self.ts._pos = np.empty((self.numatoms,3), dtype=np.float32)
         self.ts._velocities = np.copy(self.ts._pos)
         self.ts._forces = np.copy(self.ts._pos)
-        self._read_next_timestep(ts=aatraj.ts)
+        self._read_next_timestep(ts=None)
         
     def close(self):
         self.aatraj.close()
@@ -318,16 +318,16 @@ class CGReader(base.Reader):
     def _read_next_timestep(self, ts=None):
         if(ts is None):
             ts = self.aatraj.next()
-        self.ts.frame = ts.frame        
+        self.ts.frame = ts.frame
 
         #now, we must painstakingly and annoyingly put each cg group into the same periodic image
         #as its residue 
         if(self.aatraj.periodic):
-
+            dims = ts.dimensions
             for r in self.u.ref_u.residues:
                 centering_vector = np.copy(r.atoms[0].pos)
                 for a in r.atoms:
-                    a.pos[:] =  same_img(a.pos[:], centering_vector, ts.dimensions)
+                    a.pos[:] =  same_img(a.pos[:], centering_vector, dims)
                                             
         self.ts._pos = self.top_map.dot( ts._pos )
         try:

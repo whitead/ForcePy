@@ -15,6 +15,7 @@ except ImportError as e:
     
 from ForcePy.Util import *
 from ForcePy.ForceCategories import *
+from ForcePy.Analysis import *
 from ForcePy.CGMap import CGUniverse, apply_mass_map, create_mass_map, write_lammps_data
 try:
     from mpi4py import MPI
@@ -32,6 +33,7 @@ class ForceMatch:
         self.ref_cats = []
         self.tar_cats = []
         self.ref_forces =  []
+        self.analysis = []
         self.tar_forces = []
         self.u = cguniverse
         if(input_json):
@@ -131,6 +133,14 @@ class ForceMatch:
             if(not (cat is None)):
                 self.ref_cats.append(cat)
             f.setup_hook(self.u)
+
+    def add_analysis(self, *analysis):
+        for a in analysis:
+            self.analysis.append(a)
+            cat = a.get_category()
+            if(cat is not None):
+                self.ref_cats.append(cat)
+            a.setup_hook(self.u)
 
 
     def swap_match_parameters_cache(self):
@@ -730,10 +740,14 @@ class ForceMatch:
             tfcat._setup(self.u)        
 
     def _teardown(self):
+        for a in self.analysis:
+            a.update(self.u)
+            a.write()
         for rfcat in self.ref_cats:
             rfcat._teardown()
         for tfcat in self.tar_cats:
-            tfcat._teardown()        
+            tfcat._teardown()
+
 
             
     def write(self, folder = os.curdir, table_points=10000, 

@@ -158,7 +158,7 @@ class CoordNumber(Analysis):
         if(type(self.outfile) != file):
             self.outfile = open(self.outfile, 'w')
 
-        self.outfile.write('{}\n'.format(self.cn))
+        self.outfile.write('{:10}\n'.format(self.cn))
 
 
         

@@ -123,7 +123,7 @@ class RDF(Analysis):
                            self.hist):
             r = 0.5 * (rl + rr)
             gr = (3 * h / (density * 4 * pi * (rr**3 - rl**3)))
-            self.outfile.write('{} {}\n'.format(r, gr))
+            self.outfile.write('{:10} {:10}\n'.format(r, gr))
 
         
 class CoordNumber(Analysis):

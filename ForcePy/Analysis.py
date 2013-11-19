@@ -126,3 +126,35 @@ class RDF(Analysis):
             self.outfile.write('{} {}\n'.format(r, gr))
 
         
+class CoordNumber(Analysis):
+    def __init__(self, category, period, outfile, r0, cutoff):
+        super(RDF, self).__init__(category, period, outfile, cutoff)
+        self.binsize = binsize
+        self.cutoff = cutoff
+        self.r0 = r0
+
+    
+    def do_update(self, u):
+        self.count = 0
+        for i in range(u.atoms.numberOfAtoms()):
+            #check to if this is a valid type
+            if(self.mask1[i]):
+                maskj = self.mask2
+            elif(self.mask2[i]):
+                maskj = self.mask1
+            else:
+                continue
+            for r,d,j in self.category.generate_neighbor_vecs(i, u, maskj):
+                if(i < j and d < self.r0):
+                    self.count += 1
+
+
+    def write(self):        
+        
+        if(type(self.outfile) != file):
+            self.outfile = open(self.outfile, 'w')
+
+        self.outfile.write('{}\n'.format(self.count))
+
+
+        

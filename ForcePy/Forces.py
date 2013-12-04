@@ -52,9 +52,9 @@ class Force(object):
         clone.sel1, clone.sel2, clone.mask1, clone.mask2 = self.sel1, self.sel2, self.mask1, self.mask2
 
         try:
-            cone.avg_count = self.avg_count
-            cone.avg_w = np.copy(self.avg_w)
-            cone.lip = np.copy(lip)
+            clone.avg_count = self.avg_count
+            clone.avg_w = np.copy(self.avg_w)
+            clone.lip = np.copy(lip)
             for r in self.regularization:
                 clone.add_regularizer(r)            
         except AttributeError:

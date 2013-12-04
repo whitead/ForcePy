@@ -143,13 +143,6 @@ class ForceMatch:
             a.setup_hook(self.u)
 
 
-    def swap_match_parameters_cache(self):
-        try:
-            for c,f in zip(self.cache, self.tar_forces):
-                c,f.eta = f.eta,c
-        except AttributeError:
-            self.cache = [f.eta for f in self.tar_forces]
-
 
     def output_energies_mpi(self, outfile):
         '''This is for assesing the energy coming out of the force-matching
@@ -589,7 +582,7 @@ class ForceMatch:
         
     
                             
-    def observation_match_mpi(self, target_obs = None, 
+    def observation_match_mpi(self, target_obs = None, repeats=1,
                               obs_sweeps = 25, do_plots = True,
                               curve_regularize=True):
         """ Match observations.
@@ -649,8 +642,10 @@ class ForceMatch:
 
         if(do_plots):
             self._teardown_plot()
-
-
+            
+        #Tail recursion for repeats for now. TCO is not optimized in python.
+        if(repeats > 1):
+            self.observation_match_mpi(target_obs, repeats - 1, obs_sweeps, do_plots, cuvre_regularize)
 
     def _teardown_plot(self):
         plt.close()
@@ -794,7 +789,7 @@ class ForceMatch:
             if(rank != 0):
                 return
         
-        print "conversion = %g" % force_conv
+#        print "conversion = %g" % force_conv
         
         #table file names
         table_names = {}

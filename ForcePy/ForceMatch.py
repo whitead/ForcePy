@@ -582,7 +582,7 @@ class ForceMatch:
         
     
                             
-    def observation_match_mpi(self, target_obs = None, repeats=1,
+    def observation_match_mpi(self, target_obs = None,
                               obs_sweeps = 25, do_plots = True,
                               curve_regularize=True):
         """ Match observations.
@@ -641,11 +641,7 @@ class ForceMatch:
                 self._plot_forces()
 
         if(do_plots):
-            self._teardown_plot()
-            
-        #Tail recursion for repeats for now. TCO is not optimized in python.
-        if(repeats > 1):
-            self.observation_match_mpi(target_obs, repeats - 1, obs_sweeps, do_plots, cuvre_regularize)
+            self._teardown_plot()            
 
     def _teardown_plot(self):
         plt.close()

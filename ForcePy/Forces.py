@@ -47,6 +47,20 @@ class Force(object):
         self.regularization = []
         self.lip = np.ones( np.shape(self.w) , dtype=np.float32)
 
+    def setup_clone(self, clone):
+
+        clone.sel1, clone.sel2, clone.mask1, clone.mask2 = self.sel1, self.sel2, self.mask1, self.mask2
+
+        try:
+            cone.avg_count = self.avg_count
+            cone.avg_w = np.copy(self.avg_w)
+            cone.lip = np.copy(lip)
+            for r in self.regularization:
+                clone.add_regularizer(r)            
+        except AttributeError:
+            pass
+                    
+        
     def update(self, df):
         negative_grad = self.w_grad #not actually negative yet. The negative sign is in the df
         np.dot(self.temp_grad, df, negative_grad)
@@ -375,6 +389,7 @@ class AnalyticForce(Force):
     def clone_force(self):
         assert type(copy) == AnalyticForce, "Must implement clone_force method for %s" % type(copy)
         copy = AnalyticForce(self.category.__class__, self.call_force, self.call_grad, len(self.w), self.cutoff, self.call_potential)
+        self.setup_clone(copy)
         return copy
 
     @property
@@ -498,6 +513,7 @@ class HarmonicForce(AnalyticForce):
 
     def clone_force(self):
         copy = HarmonicForce(self.category.__class__, self.cutoff)
+        self.setup_clone(copy)
         return copy
 
 
@@ -535,6 +551,7 @@ class FixedHarmonicForce(AnalyticForce):
 
     def clone_force(self):
         copy = FixedHarmonicForce(self.category.__class__, k=self.k, x0=self.x0, x0_guess=self.w[1])
+        self.setup_clone(copy)
         return copy    
 
     def __reduce__(self):
@@ -687,6 +704,7 @@ class SpectralForce(Force):
         
     def clone_force(self):
         copy = SpectralForce(self.category.__class__, self.mesh, self.basis, initial_w=self.w, w_range=self.eta)
+        self.setup_clone(copy)
         return copy           
 
     def calc_force_array(self, d, forces):

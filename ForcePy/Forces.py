@@ -488,7 +488,7 @@ class LJForce(AnalyticForce):
         
     @staticmethod
     def lj(d, w):
-        return -4 * w[0] * (6 * (w[1] / d) ** 7 - 12 * (w[1] / d) ** 13)
+        return -4  * w[0] / w[1] * (6 * (w[1] / d) ** 7 - 12 * (w[1] / d) ** 13)
 
     @staticmethod
     def ulj(d, w):
@@ -496,7 +496,7 @@ class LJForce(AnalyticForce):
 
     @staticmethod
     def dlj(d, w):
-        return np.asarray([4 * (6 * (w[1] / d) ** 7 - 12 * (w[1] / d) ** 13), 4 * w[0] * (42 * (w[1] / d) ** 6 - 156 * (w[1] / d) ** 12)])
+        return np.asarray([4 / w[1] * (6 * (w[1] / d) ** 7 - 12 * (w[1] / d) ** 13), 4 * w[0] / w[1] * (36 * (w[1] / d) ** 6 - 144 * (w[1] / d) ** 12)])
 
     @property
     def mind(self):

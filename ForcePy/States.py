@@ -4,9 +4,9 @@ class State_Mask(object):
     """This object generates a mask on the fly for a particle given
     its state function acting on a MDAnalysis Universe"""
 
-    def __init__(self, forward_map, state_function, state_index):
+    def __init__(self, cgtofg_fiber_map, state_function, state_index):
         self.fxn = state_function
-        self.map = forward_map
+        self.map = cgtofg_fiber_map
         self.state = state_index
         
     

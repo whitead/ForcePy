@@ -48,7 +48,7 @@ class CGUniverse(Universe):
             names = [ '%dX' % x for x in range(len(selections))]
         if(len(names) != len(selections)):
             raise ValueError('Length of slections (%d) must match lenght of names (%d)' % (len(selections), len(names)))
-        self.ref_u = otherUniverse
+        self.fgref_u = otherUniverse
         self.atoms = AtomGroup([])
         self.selections = selections
         self.names = names
@@ -73,7 +73,7 @@ class CGUniverse(Universe):
         #atoms cannot be written out of index order, so we 
         #need to iterate residue by residue
         index = 0
-        reverse_map = {} #keys = fine atoms, values = coarse beads
+        fgtocg_incl_map = {} #keys = fine atoms, values = coarse beads
         residues = {}
         #keep track of selections, so we can throw a useful error if we don't end up selecting anything
         selection_count = {}
@@ -82,15 +82,15 @@ class CGUniverse(Universe):
             selection_count[s] = 0
 
         #if we're reducing the residues, we'll need to take care of that
-        ref_residues = self.ref_u.residues
+        ref_residues = self.fgref_u.residues
         if(self.residue_reduction_map):
             #reduce them
             ref_residues = []
             for i,ri in enumerate(self.residue_reduction_map):
                 ref_residues.append(Residue(name='CMB', id=i+1, 
-                                            atoms=reduce(lambda x,y: x+y, [self.ref_u.residues[j] for j in ri]),
+                                            atoms=reduce(lambda x,y: x+y, [self.fgref_u.residues[j] for j in ri]),
                                             resnum=i+1))
-
+        total_masses = []
         for r in ref_residues:
             residue_atoms = []
             for s,n in zip(self.selections, self.names):
@@ -102,18 +102,21 @@ class CGUniverse(Universe):
 
                 selection_count[s] += len(group)
                 
-                #make new atom
-                new_mass = sum([x.mass if x in group else 0 for x in r])
-                if(sum([1 if x in group else 0 for x in r]) > 0 and new_mass == 0):                    
+                #calculate the total mass lumped into the new CG atom
+                total_mass = sum([x.mass if x in group else 0 for x in r])
+                if(sum([1 if x in group else 0 for x in r]) > 0 and total_mass == 0):                    
                     raise ValueError('Zero mass CG particle found! Please check all-atom masses and/or set them manually via \"fine_grain_universe.selectAtoms(...).set_mass(...)\"')
-
-                a = Atom(index, n, n, r.name, r.id, r.atoms[0].segid, new_mass, 0) 
-                    
+                #make new atom, using total mass as mass
+                #masses are corrected after hydrogens are collapsed in
+                #and the fg to cg maps are defined 
+                a = Atom(index, n, n, r.name, r.id, r.atoms[0].segid, total_mass, 0) 
+                
                 index += 1
+
                 for ra in group:
-                    if(ra in reverse_map):
-                        raise ValueError('Attemtping to map {} to {} and {}'.format(ra, a, reverse_map[ra]))
-                    reverse_map[ra] = a
+                    if(ra in fgtocg_incl_map):
+                        raise ValueError('Attemtping to map {} to {} and {}'.format(ra, a, fgtocg_incl_map[ra]))
+                    fgtocg_incl_map[ra] = a
 
                 #append atom to new residue atom group
                 residue_atoms.append(a)
@@ -141,55 +144,64 @@ class CGUniverse(Universe):
                 raise ValueError('Selection "%s" matched no atoms' % s)        
 
         #check counting
-        if(len(self.ref_u.atoms) < total_selected):
+        if(len(self.fgref_u.atoms) < total_selected):
             print 'Warining: some atoms placed into more than 1 CG Site'
-        elif(len(self.ref_u.atoms) > total_selected):
+        elif(len(self.fgref_u.atoms) > total_selected):
             print 'Warning: some atoms not placed into CG site'
         
 
         #find hydrogens and collapse them into beads 
         if(self.chydrogens):
-            for b in self.ref_u.bonds:
+            for b in self.fgref_u.bonds:
                 #my hack for inferring a hydrogen
                 for a1,a2 in [(b.atom1, b.atom2), (b.atom2, b.atom1)]:
                     if(a1.type.startswith('H') and a1.mass < 4.):
-                        reverse_map[a1] = reverse_map[a2]
+                        fgtocg_incl_map[a1] = fgtocg_incl_map[a2]
                         #add the mass
-                        reverse_map[a2].mass += a1.mass        
+                        fgtocg_incl_map[a2].mass += a1.mass        
 
         #generate matrix mappings for center of mass and sum of forces
         # A row is a mass normalized cg site defition. or unormalized 1s for forces
-        self.top_map = npsp.lil_matrix( (self.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) , dtype=np.float32)
-        self.force_map = npsp.lil_matrix( (self.atoms.numberOfAtoms(), self.ref_u.atoms.numberOfAtoms()) , dtype=np.float32)
+        self.pos_map = npsp.lil_matrix( (self.atoms.numberOfAtoms(), self.fgref_u.atoms.numberOfAtoms()) , dtype=np.float32)
+        self.force_map = npsp.lil_matrix( (self.atoms.numberOfAtoms(), self.fgref_u.atoms.numberOfAtoms()) , dtype=np.float32)
 
         #keep a forward map for use in state-masks
         #The key is a CG atom number and the value is an atom group of the fine-grain atoms
-        self.forward_map = [[] for x in range(self.atoms.numberOfAtoms())]
+        self.cgtofg_fiber_map = [[] for x in range(self.atoms.numberOfAtoms())]
 
-        for a in self.ref_u.atoms:
+        for a in self.fgref_u.atoms:
             try:
-                self.top_map[reverse_map[a].number, a.number] = a.mass / reverse_map[a].mass
-                self.force_map[reverse_map[a].number, a.number] = 1.
-                self.forward_map[reverse_map[a].number] += [a.number]
+                self.pos_map[fgtocg_incl_map[a].number, a.number] = a.mass / fgtocg_incl_map[a].mass
+                self.force_map[fgtocg_incl_map[a].number, a.number] = 1.
+                self.cgtofg_fiber_map[fgtocg_incl_map[a].number] += [a.number]
             except KeyError:
                 #was not selected
                 pass
 
+        #set the masses correctly now that the total is used and
+        #a cg to fg map is available
+        #see Noid et al 2008 (MS-CG I), M_I = (\sum_i c_Ii^2 / m_i)^-1 for nonzero c_Ii
+        #c_Ii = fg atom mass / cg atom total mass for all fg atoms included
+        #in the definition of cg atom I
+        for cg_idx in range(self.atoms.numberOfAtoms()):
+            new_mass = 1.0 / sum([(self.fgref_u.atoms[fg_idx].mass / self.atoms[cg_idx].mass ** 2) for fg_idx in self.cgtofg_fiber_map[cg_idx]])
+            self.atoms[cg_idx].mass = new_mass
+
         for i in range(self.atoms.numberOfAtoms()):
             #convert the list of atom indices into an AtomGroup object
             #it has to be wraped so we can manipulate it later
-            self.forward_map[i] = AtomGroupWrapper(reduce(lambda x,y: x + y, [self.ref_u.atoms[x] for x in self.forward_map[i]]))
+            self.cgtofg_fiber_map[i] = AtomGroupWrapper(reduce(lambda x,y: x + y, [self.fgref_u.atoms[x] for x in self.cgtofg_fiber_map[i]]))
         
         #Put them into efficient sparse matrix.
-        self.top_map = self.top_map.tobsr()
+        self.pos_map = self.pos_map.tobsr()
         self.force_map = self.force_map.tobsr()
                                     
         #add bonds using the reverse map
         self.bonds = []
-        for b in self.ref_u.bonds:
+        for b in self.fgref_u.bonds:
             try:
-                cgatom1 = reverse_map[b.atom1]
-                cgatom2 = reverse_map[b.atom2]
+                cgatom1 = fgtocg_incl_map[b.atom1]
+                cgatom2 = fgtocg_incl_map[b.atom2]
                 for cbg in self.bonds:
                     if(not (cbg.atom1 in [cgatom1, cgatom2]) and not( cbg.atom2 in [cgatom1, cgatom2])):
                     #OK, no bond exists yet
@@ -198,7 +210,7 @@ class CGUniverse(Universe):
                 #was not in selection
                 pass
 
-        self.__trajectory = CGReader(self, self.ref_u.trajectory, self.top_map, self.force_map, self.lfdump)
+        self.__trajectory = CGReader(self, self.fgref_u.trajectory, self.pos_map, self.force_map, self.lfdump)
         for a in self.atoms:
             a.universe = self
 
@@ -263,7 +275,7 @@ class CGUniverse(Universe):
            membership percentages for each state. The number of states
            is state_number. This returns an array of masks for each
            possible state"""
-        return [State_Mask(self.forward_map, state_function, x) for x in range(state_number)]
+        return [State_Mask(self.cgtofg_fiber_map, state_function, x) for x in range(state_number)]
 
 class Timestep(base.Timestep):
     
@@ -279,18 +291,18 @@ class Timestep(base.Timestep):
 
 class CGReader(base.Reader):
 
-    def __init__(self, universe, aatraj, top_map, force_map, lfdump):
+    def __init__(self, universe, aatraj, pos_map, force_map, lfdump):
 
         self.u = universe
         self.aatraj = aatraj
 
-        self.top_map = top_map
+        self.pos_map = pos_map
         self.force_map = force_map
         
         self.lfdump = lfdump
 
         self.units = aatraj.units
-        self.numatoms = np.shape( top_map )[0] #The topology matrix mapping should have a number of rows equal to cg atoms
+        self.numatoms = np.shape( pos_map )[0] #The topology matrix mapping should have a number of rows equal to cg atoms
         self.periodic = aatraj.periodic
         self.numframes = aatraj.numframes
         self.skip  = aatraj.skip
@@ -324,21 +336,21 @@ class CGReader(base.Reader):
         #as its residue 
         if(self.aatraj.periodic):
             dims = ts.dimensions
-            for r in self.u.ref_u.residues:
+            for r in self.u.fgref_u.residues:
                 centering_vector = np.copy(r.atoms[0].pos)
                 for a in r.atoms:
                     a.pos[:] =  same_img(a.pos[:], centering_vector, dims)
                                             
-        self.ts._pos = self.top_map.dot( ts._pos )
+        self.ts._pos = self.pos_map.dot( ts._pos )
         try:
-            self.ts._velocities[:] = self.top_map.dot( ts._velocities ) #COM motion
+            self.ts._velocities[:] = self.pos_map.dot( ts._velocities ) #COM motion
         except AttributeError:
             self.ts._velocities[:] = np.zeros( (self.numatoms, 3) ,dtype=np.float32)
 
         #check to see if we have a lammps force dump for forces
         if(self.lfdump):
             #we do, let's read it
-            forces = np.zeros( (np.shape(self.top_map)[1], 3), dtype=np.float32)
+            forces = np.zeros( (np.shape(self.pos_map)[1], 3), dtype=np.float32)
             while(not self.lfdump.readline().startswith('ITEM: ATOMS')):
                 pass
             for i in range(len(forces)):
@@ -359,7 +371,7 @@ class CGReader(base.Reader):
 
         #if we're doing multistate stuff, we need to clear the states each step
         if(type(self.u) == CGUniverse):
-            for ag in self.u.forward_map:
+            for ag in self.u.cgtofg_fiber_map:
                 ag.clear_state()
 
         return self.ts

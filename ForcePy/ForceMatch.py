@@ -12,7 +12,7 @@ try:
 except ImportError as e:
     plotting_support = False
     plotting_error = e
-    
+
 from ForcePy.Util import *
 from ForcePy.ForceCategories import *
 from ForcePy.Analysis import *
@@ -316,8 +316,11 @@ class ForceMatch:
 
 
     def finalize(self):
-        '''Call this method before writing to use the average over the force-matching, instead of the last observed weights. This
-           is important when convergence is oscillatory or observation matching is being used.
+        '''Call this method before writing to use the average over the
+           force-matching, instead of the last observed weights. This
+           is important when convergence is oscillatory or observation
+           matching is being used.
+
         '''
         
         for f in self.tar_forces:
@@ -814,19 +817,19 @@ class ForceMatch:
             #we try a few times, because not all forces are for 2 types
             if(type(f.category) == Pairwise):
                 try:
-                    string.append("pair_coeff %d %d %s %s %d\n" % (self.get_atom_type_index(f.sel1),
+                    string.append("pair_coeff %d %d %s %s %g\n" % (self.get_atom_type_index(f.sel1),
                                                                    self.get_atom_type_index(f.sel2),
                                                                    table_names[Pairwise].name,
                                                                    f.short_name,
                                                                    f.maxd))
                 except AttributeError:
                     try:
-                        string.append("pair_coeff * %d %s %s %d\n" % (self.get_atom_type_index(f.sel1),
+                        string.append("pair_coeff * %d %s %s %g\n" % (self.get_atom_type_index(f.sel1),
                                                                       table_names[Pairwise].name,
                                                                       f.short_name,
                                                                       f.maxd))
                     except AttributeError:
-                        string.append("pair_coeff * * %s %s %d\n" % (table_names[Pairwise].name,
+                        string.append("pair_coeff * * %s %s %g\n" % (table_names[Pairwise].name,
                                                                      f.short_name,
                                                                      f.maxd))
         #bonds
@@ -887,6 +890,9 @@ class ForceMatch:
                 if(not a.type in self.atom_type_map):
                     self.atom_type_map[a.type] = index
                     index += 1
+        #check if this is a one component system first
+        if(len(self.atom_type_map) == 1):
+            return 1
         if(type(atom_type) != type("")):
             assert(type(atom_type) == type(self.u.atoms[0]))
             atom_type = atom_type.type

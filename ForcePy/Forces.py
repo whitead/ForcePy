@@ -39,7 +39,6 @@ class Force(object):
             if(eta is None):
                 self.eta = max(25, abs(initial_w) * 2)
 
-        self.w_avg = np.copy( self.w )
         self.avg_count = 0
         self.temp_grad = np.empty( (w_dim, 3) , dtype=np.float32)
         self.temp_force = np.empty( 3 , dtype=np.float32)
@@ -76,6 +75,8 @@ class Force(object):
         
     def update_avg(self):
         #update overall average
+        if(self.avg_count == 0):
+            self.w_avg = np.copy( self.w )
         self.avg_count += 1
         self.w_avg = self.w_avg * (self.avg_count - 1) / (self.avg_count) + self.w / (self.avg_count)
 
@@ -88,7 +89,7 @@ class Force(object):
         try:
             self._build_mask(self.sel1, self.sel2, u)
         except AttributeError:
-            pass #some forces don't have selections, ie FileForce
+            pass #some forces don't have selections, eg FileForce
 
     def set_potential(self, u):
         """ Set the basis function for the potential calculation

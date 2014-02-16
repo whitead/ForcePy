@@ -84,7 +84,7 @@ if __name__ == '__main__':
             -Wunreachable-code -Werror'
         define_macros = [('DEBUG', '1')]
     else:
-        extra_compile_args = ['-O3']
+        extra_compile_args = ['-Ofast']
         define_macros = []
 
     extensions = [Extension('ForcePy.Util', ['ForcePy/Util.%s' % ("pyx" if use_cython else "c")],

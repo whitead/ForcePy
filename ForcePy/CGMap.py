@@ -63,6 +63,7 @@ class CGUniverse(Universe):
 
 
         self._build_structure()
+        self.trajectory.rewind()
         
         print('Topology mapping by center of mass, forces by sum')
         print('This is %s a periodic trajectory. %d Frames' % ('' if self.trajectory.periodic else 'not', self.trajectory.numframes))

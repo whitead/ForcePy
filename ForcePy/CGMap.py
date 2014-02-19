@@ -63,7 +63,6 @@ class CGUniverse(Universe):
 
 
         self._build_structure()
-        self.trajectory.rewind()
         
         print('Topology mapping by center of mass, forces by sum')
         print('This is %s a periodic trajectory. %d Frames' % ('' if self.trajectory.periodic else 'not', self.trajectory.numframes))
@@ -313,7 +312,7 @@ class CGReader(base.Reader):
         self.ts._pos = np.empty((self.numatoms,3), dtype=np.float32)
         self.ts._velocities = np.copy(self.ts._pos)
         self.ts._forces = np.copy(self.ts._pos)
-        self._read_next_timestep(ts=None)
+        self._read_next_timestep(ts=self.aatraj.ts)
         
     def close(self):
         self.aatraj.close()

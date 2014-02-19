@@ -49,7 +49,12 @@ class Pairwise(ForceCategory):
     instance = None
 
     @staticmethod
-    def get_instance(*args):        
+    def get_instance(*args):
+        
+        if(len(args) == 0 or args[0] is None):
+            #doesn't care about cutoff
+            return Pairwise.instance
+
         if(Pairwise.instance is None):
             Pairwise.instance = Pairwise(args[0])
         else:

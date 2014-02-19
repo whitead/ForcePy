@@ -87,7 +87,7 @@ class Analysis(object):
 
 
 class RDF(Analysis):
-    def __init__(self, category, period, outfile, binsize, cutoff):
+    def __init__(self, category, period, outfile, binsize=0.1, cutoff=None):
         super(RDF, self).__init__(category, period, outfile, cutoff)
         self.hist = [0 for x in np.arange(0,cutoff, binsize)]
         self.binsize = binsize

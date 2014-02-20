@@ -319,12 +319,12 @@ class ForceMatch:
         '''Call this method before writing to use the average over the
            force-matching, instead of the last observed weights. This
            is important when convergence is oscillatory or observation
-           matching is being used.
+           matching is being used. Some forces also do things at the
+           end like fill in unobserved points with repulsion
 
-        '''
-        
+        '''        
         for f in self.tar_forces:
-            f.swap_avg()
+            f.finalize_hook(self)
 
     def _force_match_task(self, start, end, do_print = False):
         ref_forces = np.zeros( (self.u.atoms.numberOfAtoms(), 3) )
@@ -769,7 +769,10 @@ class ForceMatch:
                     rf.write_table(f, force_conversion, energy_conversion, distance_conversion, table_points)
             if(write_restart):
                 import pickle
-                pickle.dump(self, open('restart.pickle', 'wb'))
+                try:
+                    pickle.dump(self, open('restart.pickle', 'wb'))
+                except pickle.PicklingError as e:
+                    print 'Could not write restart: {}'.format(e)
         except (IOError,AttributeError) as e:
             print e
         finally:

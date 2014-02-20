@@ -80,7 +80,7 @@ class Force(object):
         self.avg_count += 1
         self.w_avg = self.w_avg * (self.avg_count - 1) / (self.avg_count) + self.w / (self.avg_count)
 
-    def swap_avg(self):
+    def _swap_avg(self):
         self.w, self.w_avg = self.w_avg, self.w
 
 
@@ -90,6 +90,12 @@ class Force(object):
             self._build_mask(self.sel1, self.sel2, u)
         except AttributeError:
             pass #some forces don't have selections, eg FileForce
+
+    #In case the force needs access to the universe for finishing up, override (and call this method).
+    def finalize_hook(self, u):
+        #switch to average
+        self._swap_avg()
+
 
     def set_potential(self, u):
         """ Set the basis function for the potential calculation
@@ -656,6 +662,7 @@ class SpectralForce(Force):
         self.category = category.get_instance(mesh.max())
         self._long_name = "SpectralForce for %s" % category.__name__
         self._short_name = "SF_%s" % category.__name__
+        self.do_repulsion_fill = None
         
         #if this is an updatable force, set up stuff for it
         self._setup_update_params(len(mesh), initial_w=initial_w, eta=w_range)
@@ -705,6 +712,7 @@ class SpectralForce(Force):
         
     def clone_force(self):
         copy = SpectralForce(self.category.__class__, self.mesh, self.basis, initial_w=self.w, w_range=self.eta)
+        copy.do_repulsion_fill = self.do_repulsion_fill
         self.setup_clone(copy)
         return copy           
 
@@ -780,6 +788,31 @@ class SpectralForce(Force):
 
         return self.temp_force
 
+    def fill_with_repulsion(self, end_at=None, height=None, power=12):
+        self.do_repulsion_fill = lambda x: SpectralForce._do_fill_with_repulsion(x, end_at, height, power)
+
+    def finalize_hook(self, u):
+        super(SpectralForce, self).finalize_hook(u)
+        if(self.do_repulsion_fill is not None):
+            self.do_repulsion_fill(self)
+
+    def _do_fill_with_repulsion(self, end_at=None, height=None, power=12):
+        '''
+        Fill out the beginning of the force with a repulsive
+        potential.  Can give a distance from which to end the
+        repulsion or the last point, starting from the beginning, of
+        the weights that never was moved.
+        '''
+        #convert from distance to mesh index
+        if(end_at is None):
+            end_at_index = np.where(self.lip > 1.)[0][0]
+            end_at = self.mesh[end_at_index]
+        else:
+            end_at_index = self.mesh.mesh_index(end_at)
+        if(height is None):
+            height = self.w[end_at_index]
+        self.w[:end_at_index] = height * (1 + np.power(np.arange( end_at, 0, -float(end_at) / end_at_index, dtype=np.float32), power))
+        
 
 
 def build_repulsion(mesh, end_at, height, power=12):

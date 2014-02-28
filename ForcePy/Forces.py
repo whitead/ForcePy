@@ -812,14 +812,3 @@ class SpectralForce(Force):
         if(height is None):
             height = self.w[end_at_index]
         self.w[:end_at_index] = height * (1 + np.power(np.arange( end_at, 0, -float(end_at) / end_at_index, dtype=np.float32), power))
-        
-
-
-def build_repulsion(mesh, end_at, height, power=12):
-    '''Build a repulsive initial guess for force-matching. end_at is units of distance, not the mesh index
-    '''
-    #convert from distance to mesh index
-    end_at = mesh.mesh_index(end_at)
-    result = np.zeros(len(mesh), dtype=np.float32)
-    result[:end_at] = height * (np.power(np.arange( end_at, 0, -1, dtype=np.float32), power) / np.float32(end_at ** power))
-    return result

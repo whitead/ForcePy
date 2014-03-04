@@ -7,15 +7,16 @@ Can be used independently for topology reduction in coarse-graining.
 
 ## License
 
-Copyright 2013
+Copyright 2014
 
 This code is provided as a preview of an upcoming licensed and peer-reviewed/published version. It is currently unlicensed, meaning modification, distribution, sublicensing and commercial use are forbidden.
 
 Example 1: Coarse-graining a Trajectory of Water
 ==========
 
-The ForcePy module can be used to coarse-grained a trajectory. In this example, we'll convert 
-an all-atom water simulation to a 2-site water model.
+The ForcePy module can be used to coarse-grained a trajectory. In this
+example, we'll convert an all-atom water simulation to a 2-site water
+model.
 
 The first step is to import the necessary libraries:
 
@@ -34,7 +35,7 @@ fine-grained trajectory is:
 
 ```python
 fine_uni = Universe("foo.tpr", "foo.trr")
-fine_uni.trajectory.periodic = True #NOTE: You MUST set this flag yourself, since there is no indication in the TPR files
+fine_uni.trajectory.periodic = True #NOTE: You MUST set this flag yourself
 ```
 
 Now we create a coarse-grained trajectory using the fine-grained trajectory as 
@@ -71,9 +72,9 @@ Now that you have a coarse-grained trajectory, you may write out the
 structure or trajectory using the following syntax:
 
 ```python
-coarse_uni.write_structure("cg_foo.pdb")
-coarse_uni.write_structure("cg_foo.pdb", bonds='all')
-coarse_uni.write_trajectory("cg_foo.dcd")
+write_structure(coarse_uni, "cg_foo.pdb")
+write_structure(coarse_uni, "cg_foo.pdb", bonds='all')
+write_trajectory(coarse_uni, "cg_foo.dcd")
 ```
     
 

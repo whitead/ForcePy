@@ -967,7 +967,7 @@ class ForceMatch:
         #write force tables
         force_info = self.write_lammps_tables('%s_force' % prefix, 
                                         force_conv = force_conversion,
-                                        energy_conv = energy_conversion if energy_conversion else -force_conversion,
+                                        energy_conv = energy_conversion if energy_conversion else force_conversion,
                                         dist_conv = 1,
                                         points=table_points)
 

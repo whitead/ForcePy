@@ -812,3 +812,39 @@ class SpectralForce(Force):
         if(height is None):
             height = self.w[end_at_index]
         self.w[:end_at_index] = height * (1 + np.power(np.arange( end_at, 0, -float(end_at) / end_at_index, dtype=np.float32), power))
+
+
+class HardSphereForce(Force):
+    """A pairwise force that is 1 when two particles are within their cutoff and 0 otherwise.
+    """
+
+    def __init__(self, category, max_radius):
+        super(HardSphereForce, self)._init__()
+        self._long_name = "Hardsphere for %s" % category.__name__
+        self._short_name = "HS_%s" % category.__name__
+        self.category = category.get_instance(max_radius)
+        self.max_radius = max_radius
+        
+        #set up parameters, which is the hardsphere radius (single parameter) 
+        self._steup_update_params(1)
+        
+
+    @property
+    def mind(self):
+        return 0
+
+    def maxd(self):
+        return self.max_radius
+
+    def clone_force(self):
+        copy = HardSphereForce(self.category, self.max_radius) 
+        return copy
+
+    def calc_force_array(self, d, forces):
+        for i,di in enumerate(d):
+            forces[i] = 1 if self.w[0] < di else 0
+            
+            
+        
+        
+    

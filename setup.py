@@ -56,12 +56,13 @@ if use_cython:
     # cython has to be >=0.16 to support cython.parallel
     import Cython
     required_version = "0.16"
-    if not int(Cython.__version__.replace(".","")) >= int(required_version.replace(".", "")):
+    cython_version = ''.join(c for c in Cython.__version__ if c.isdigit())
+    if not int(cython_version) >= int(required_version.replace(".", "")):
         raise ImportError("Cython version %s (found %s) is required because it offers a handy parallelisation module" % (required_version, Cython.__version__))
     del Cython
 
 if __name__ == '__main__':
-    RELEASE = "0.1" 
+    RELEASE = "0.1"
     with open("README.md") as summary:
         LONG_DESCRIPTION = summary.read()
     CLASSIFIERS = ['Development Status :: 4 - Beta',

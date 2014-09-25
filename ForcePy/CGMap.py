@@ -58,8 +58,24 @@ class CGUniverse(Universe):
 
         if(lammps_force_dump):
             self.lfdump = open(lammps_force_dump, 'r')
+            #find which column is id and which are forces
+            line = ""
+            while(not line.startswith('ITEM: ATOMS')):
+                line = self.lfdump.readline()
+
+            self.lfdump_map = {'id':-1, 'force':-1}
+            for i, item in enumerate(line.split()):
+                if(item == 'id'):
+                    self.lfdump_map['id'] = i-2
+                elif(item == 'fx'):
+                    self.lfdump_map['force'] = i-2
+            if(self.lfdump_map['id'] == -1 or self.lfdump_map['force'] == -1):
+                raise IOError('The lammps force dump, {}, does not contain a force or id column'.format(lammps_force_dump))
+            
+                
         else:
             self.lfdump = None
+            self.lfdump_map = None
 
 
         self._build_structure()
@@ -210,7 +226,7 @@ class CGUniverse(Universe):
                 #was not in selection
                 pass
 
-        self.__trajectory = CGReader(self, self.fgref_u.trajectory, self.pos_map, self.force_map, self.lfdump)
+        self.__trajectory = CGReader(self, self.fgref_u.trajectory, self.pos_map, self.force_map, self.lfdump, self.lfdump_map)
         for a in self.atoms:
             a.universe = self
 
@@ -229,7 +245,7 @@ class CGUniverse(Universe):
     def trajectory(self):
         return self.__trajectory
 
-    def cache(self, directory='cg_cache'):
+    def cache(self, directory='cg_cache', maximum_frames=0):
         '''This precomputes the trajectory and structure so that it doesn't need to be 
            recalculated at each timestep. Especially useful for random access.
            Returns a Universe object corresponding to the cached trajectory
@@ -252,7 +268,7 @@ class CGUniverse(Universe):
 
         if(write_files):
             write_structure(self, structure, bonds='all')
-            write_trajectory(self, trajectory)        
+            write_trajectory(self, trajectory, maximum_frames)        
 
         #sync area
         if(mpi_support):
@@ -291,7 +307,7 @@ class Timestep(base.Timestep):
 
 class CGReader(base.Reader):
 
-    def __init__(self, universe, aatraj, pos_map, force_map, lfdump):
+    def __init__(self, universe, aatraj, pos_map, force_map, lfdump, lfdump_map):
 
         self.u = universe
         self.aatraj = aatraj
@@ -300,6 +316,7 @@ class CGReader(base.Reader):
         self.force_map = force_map
         
         self.lfdump = lfdump
+        self.lfdump_map = lfdump_map
 
         self.units = aatraj.units
         self.numatoms = np.shape( pos_map )[0] #The topology matrix mapping should have a number of rows equal to cg atoms
@@ -332,6 +349,8 @@ class CGReader(base.Reader):
             ts = self.aatraj.next()
         self.ts.frame = ts.frame
 
+        print self.ts.frame
+
         #now, we must painstakingly and annoyingly put each cg group into the same periodic image
         #as its residue 
         if(self.aatraj.periodic):
@@ -357,7 +376,7 @@ class CGReader(base.Reader):
                 sline = self.lfdump.readline().split()
                 #NOTE: Forces from lammps seem to be negative
                 try:
-                    forces[int(sline[0]) - 1,:] = [-float(x) for x in sline[1:]]                        
+                    forces[int(sline[self.lfdump_map['id']]) - 1,:] = [-float(x) for x in sline[self.lfdump_map['force']:]]                        
                 except ValueError:
                     raise IOError( 'Invalid forces line at %s' % reduce(lambda x,y: x + ' ' + y, sline))
             self.ts._forces[:] = self.force_map.dot( forces) 
@@ -601,12 +620,16 @@ def write_lammps_data(universe, filename, atom_type=None, bonds=True, angles=Fal
     
     
 
-def write_trajectory(universe, filename):
+def write_trajectory(universe, filename, maximum_frames=0):
     '''A simplified method for writing trajectories
     '''
     w = Writer(filename, universe.atoms.numberOfAtoms())
+    frame_count = 0
     for ts in universe.trajectory:
+        if(maximum_frames != 0 and frame_count == maximum_frames):
+            break
         w.write(ts)
+        frame_count += 1
     w.close()
 
 def create_mass_map(universe):

@@ -52,6 +52,7 @@ cdef class NeighborList(object):
     def __init__(self, u, cutoff, exclude_14 = True):
         
         #set up cell number and data
+        print 'EHLLO'
         
         self.cutoff = cutoff
         self.box = <double* > malloc(3 * sizeof(double))
@@ -62,6 +63,7 @@ cdef class NeighborList(object):
             self.box[i] = u.dimensions[i]
             self.cell_number[i] = max(1,int(self.box[i] / self.cutoff))
             self.cell_number_total *= self.cell_number[i]
+            print 'Found', self.cell_number[i], 'cells'
 
         self.nlist_lengths = [0 for x in range(u.atoms.numberOfAtoms())]
         self.nlist = np.arange(u.atoms.numberOfAtoms() * (u.atoms.numberOfAtoms() - 1), dtype=DTYPE)
@@ -70,6 +72,7 @@ cdef class NeighborList(object):
         self.head = <int*> malloc(self.cell_number_total  * sizeof(int))
         self.exclusion_list = None
         self.exclude_14 = exclude_14
+
 
         #pre-compute neighbors. Waste of space, but saves programming effort required for ghost cellls        
         self.cell_neighbors = [[] for x in range(self.cell_number_total)]
@@ -132,21 +135,21 @@ cdef class NeighborList(object):
         #The exclusion list at the most recent depth
         temp_list = [[] for x in range(u.atoms.numberOfAtoms())]
         #build 1,2 terms
-        for b in u.bonds:
-            self.exclusion_list[b.atom1.number].append(b.atom2.number)
-            self.exclusion_list[b.atom2.number].append(b.atom1.number)
+        if u.bonds is not None:
+            for b in u.bonds:
+                self.exclusion_list[b.atom1.number].append(b.atom2.number)
+                self.exclusion_list[b.atom2.number].append(b.atom1.number)
         # build 1,3 and 1,4
         for i in range( 1 if self.exclude_14 else 2):
             #copy
             temp_list[:] = self.exclusion_list[:]
             for a in range(u.atoms.numberOfAtoms()):
                 for b in range(len(temp_list[a])):
-                    self.exclusion_list[a].append(b) 
+                    self.exclusion_list[a].append(b)
 
     @cython.boundscheck(False) #turn off bounds checking
     @cython.wraparound(False) #turn off negative indices
     cdef int _build_nlist(self, u):
-
 
         if(self.exclusion_list == None):
             self._build_exclusion_list(u)
@@ -156,14 +159,17 @@ cdef class NeighborList(object):
 
         ntime = time.time()
         positions = u.atoms.get_positions(copy=False)
-                                                                        
+
+        print 'here'
         cdef int i, j, nlist_count, icell
         cdef double k
         nlist_count = 0
         for i in range(u.atoms.numberOfAtoms()):
             self.nlist_lengths[i] = 0
 
+        print 'here'
         periodic = u.trajectory.periodic
+        print u.atoms.numberOfAtoms()
         for i in range(u.atoms.numberOfAtoms()):
             icell = 0
             #fancy indepx and binning loop over dimensions
@@ -172,9 +178,14 @@ cdef class NeighborList(object):
                 k = positions[i][j]/ self.box[j] * self.cell_number[j]
                 k = floor(k % self.cell_number[j])      
                 icell =  int(k) + icell * self.cell_number[j]
+            print icell
             for ncell in self.cell_neighbors[icell]:
+                print ncell
                 j = self.head[ncell]
                 while(j != - 1):
+                    if(i != j):
+                        print 'Comparing particles', i,'and',j,'which have a dist of', \
+                            min_img_dist_sq(positions[i], positions[j], self.box, periodic)
                     if(i != j and
                        not (j in self.exclusion_list[i]) and
                        min_img_dist_sq(positions[i], positions[j], self.box, periodic) < self.cutoff ** 2):

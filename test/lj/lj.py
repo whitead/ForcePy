@@ -1,8 +1,8 @@
 from MDAnalysis import Universe
 from ForcePy import *
-import numpy as np
 
 fm = ForceMatch(Universe("lj.pdb", "lj.xyz"), "lj.json")
+fm.u.trajectory.periodic = True
 ff = LJForce(3)
 mesh = Mesh.UniformMesh(0.5,3,0.005)
 #pwf = SpectralForce(Pairwise, mesh, Basis.Gaussian(mesh, 0.1))

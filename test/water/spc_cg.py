@@ -7,7 +7,7 @@ cgu = CGUniverse(Universe("spc.tpr", "traj.trr"), ['name OW', 'name HW1 or name 
 add_residue_bonds(cgu, "name O", "name H2")
 fm = ForceMatch(cgu)
 ff = FileForce()
-pair_mesh = Mesh.UniformMesh(0.1,10,0.01)
+pair_mesh = Mesh.UniformMesh(0.1,10,0.2)
 pwf = SpectralForce(Pairwise, pair_mesh, Basis.Quartic(pair_mesh, 0.5))
 bwf = FixedHarmonicForce(Bond, 450*4.14)
 

@@ -1261,8 +1261,6 @@ static char __pyx_k_test[] = "__test__";
 static char __pyx_k_time[] = "time";
 static char __pyx_k_DTYPE[] = "DTYPE";
 static char __pyx_k_FTYPE[] = "FTYPE";
-static char __pyx_k_atom1[] = "atom1";
-static char __pyx_k_atom2[] = "atom2";
 static char __pyx_k_atoms[] = "atoms";
 static char __pyx_k_bonds[] = "bonds";
 static char __pyx_k_dtype[] = "dtype";
@@ -1301,8 +1299,6 @@ static PyObject *__pyx_n_s_RuntimeError;
 static PyObject *__pyx_n_s_ValueError;
 static PyObject *__pyx_n_s_append;
 static PyObject *__pyx_n_s_arange;
-static PyObject *__pyx_n_s_atom1;
-static PyObject *__pyx_n_s_atom2;
 static PyObject *__pyx_n_s_atoms;
 static PyObject *__pyx_n_s_bonds;
 static PyObject *__pyx_n_s_cProfile;
@@ -3457,7 +3453,7 @@ static PyObject *__pyx_f_7ForcePy_12NeighborList_12NeighborList__build_exclusion
  *         #build 1,2 terms
  *         if u.bonds is not None:             # <<<<<<<<<<<<<<
  *             for b in u.bonds:
- *                 self.exclusion_list[b.atom1.number].append(b.atom2.number)
+ *                 self.exclusion_list[b[0].number].append(b[1].number)
  */
   __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_u, __pyx_n_s_bonds); if (unlikely(!__pyx_t_1)) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 135; __pyx_clineno = __LINE__; goto __pyx_L1_error;}
   __Pyx_GOTREF(__pyx_t_1);
@@ -3470,8 +3466,8 @@ static PyObject *__pyx_f_7ForcePy_12NeighborList_12NeighborList__build_exclusion
  *         #build 1,2 terms
  *         if u.bonds is not None:
  *             for b in u.bonds:             # <<<<<<<<<<<<<<
- *                 self.exclusion_list[b.atom1.number].append(b.atom2.number)
- *                 self.exclusion_list[b.atom2.number].append(b.atom1.number)
+ *                 self.exclusion_list[b[0].number].append(b[1].number)
+ *                 self.exclusion_list[b[1].number].append(b[0].number)
  */
     __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_u, __pyx_n_s_bonds); if (unlikely(!__pyx_t_1)) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 136; __pyx_clineno = __LINE__; goto __pyx_L1_error;}
     __Pyx_GOTREF(__pyx_t_1);
@@ -3519,11 +3515,11 @@ static PyObject *__pyx_f_7ForcePy_12NeighborList_12NeighborList__build_exclusion
       /* "ForcePy/NeighborList.pyx":137
  *         if u.bonds is not None:
  *             for b in u.bonds:
- *                 self.exclusion_list[b.atom1.number].append(b.atom2.number)             # <<<<<<<<<<<<<<
- *                 self.exclusion_list[b.atom2.number].append(b.atom1.number)
+ *                 self.exclusion_list[b[0].number].append(b[1].number)             # <<<<<<<<<<<<<<
+ *                 self.exclusion_list[b[1].number].append(b[0].number)
  *         # build 1,3 and 1,4
  */
-      __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_b, __pyx_n_s_atom1); if (unlikely(!__pyx_t_1)) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 137; __pyx_clineno = __LINE__; goto __pyx_L1_error;}
+      __pyx_t_1 = __Pyx_GetItemInt(__pyx_v_b, 0, long, 1, __Pyx_PyInt_From_long, 0, 0, 1); if (unlikely(__pyx_t_1 == NULL)) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 137; __pyx_clineno = __LINE__; goto __pyx_L1_error;};
       __Pyx_GOTREF(__pyx_t_1);
       __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_t_1, __pyx_n_s_number); if (unlikely(!__pyx_t_4)) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 137; __pyx_clineno = __LINE__; goto __pyx_L1_error;}
       __Pyx_GOTREF(__pyx_t_4);
@@ -3531,7 +3527,7 @@ static PyObject *__pyx_f_7ForcePy_12NeighborList_12NeighborList__build_exclusion
       __pyx_t_1 = PyObject_GetItem(__pyx_v_self->exclusion_list, __pyx_t_4); if (unlikely(__pyx_t_1 == NULL)) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 137; __pyx_clineno = __LINE__; goto __pyx_L1_error;};
       __Pyx_GOTREF(__pyx_t_1);
       __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-      __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_v_b, __pyx_n_s_atom2); if (unlikely(!__pyx_t_4)) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 137; __pyx_clineno = __LINE__; goto __pyx_L1_error;}
+      __pyx_t_4 = __Pyx_GetItemInt(__pyx_v_b, 1, long, 1, __Pyx_PyInt_From_long, 0, 0, 1); if (unlikely(__pyx_t_4 == NULL)) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 137; __pyx_clineno = __LINE__; goto __pyx_L1_error;};
       __Pyx_GOTREF(__pyx_t_4);
       __pyx_t_2 = __Pyx_PyObject_GetAttrStr(__pyx_t_4, __pyx_n_s_number); if (unlikely(!__pyx_t_2)) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 137; __pyx_clineno = __LINE__; goto __pyx_L1_error;}
       __Pyx_GOTREF(__pyx_t_2);
@@ -3542,12 +3538,12 @@ static PyObject *__pyx_f_7ForcePy_12NeighborList_12NeighborList__build_exclusion
 
       /* "ForcePy/NeighborList.pyx":138
  *             for b in u.bonds:
- *                 self.exclusion_list[b.atom1.number].append(b.atom2.number)
- *                 self.exclusion_list[b.atom2.number].append(b.atom1.number)             # <<<<<<<<<<<<<<
+ *                 self.exclusion_list[b[0].number].append(b[1].number)
+ *                 self.exclusion_list[b[1].number].append(b[0].number)             # <<<<<<<<<<<<<<
  *         # build 1,3 and 1,4
  *         for i in range( 1 if self.exclude_14 else 2):
  */
-      __pyx_t_2 = __Pyx_PyObject_GetAttrStr(__pyx_v_b, __pyx_n_s_atom2); if (unlikely(!__pyx_t_2)) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 138; __pyx_clineno = __LINE__; goto __pyx_L1_error;}
+      __pyx_t_2 = __Pyx_GetItemInt(__pyx_v_b, 1, long, 1, __Pyx_PyInt_From_long, 0, 0, 1); if (unlikely(__pyx_t_2 == NULL)) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 138; __pyx_clineno = __LINE__; goto __pyx_L1_error;};
       __Pyx_GOTREF(__pyx_t_2);
       __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_t_2, __pyx_n_s_number); if (unlikely(!__pyx_t_1)) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 138; __pyx_clineno = __LINE__; goto __pyx_L1_error;}
       __Pyx_GOTREF(__pyx_t_1);
@@ -3555,7 +3551,7 @@ static PyObject *__pyx_f_7ForcePy_12NeighborList_12NeighborList__build_exclusion
       __pyx_t_2 = PyObject_GetItem(__pyx_v_self->exclusion_list, __pyx_t_1); if (unlikely(__pyx_t_2 == NULL)) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 138; __pyx_clineno = __LINE__; goto __pyx_L1_error;};
       __Pyx_GOTREF(__pyx_t_2);
       __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-      __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_b, __pyx_n_s_atom1); if (unlikely(!__pyx_t_1)) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 138; __pyx_clineno = __LINE__; goto __pyx_L1_error;}
+      __pyx_t_1 = __Pyx_GetItemInt(__pyx_v_b, 0, long, 1, __Pyx_PyInt_From_long, 0, 0, 1); if (unlikely(__pyx_t_1 == NULL)) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 138; __pyx_clineno = __LINE__; goto __pyx_L1_error;};
       __Pyx_GOTREF(__pyx_t_1);
       __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_t_1, __pyx_n_s_number); if (unlikely(!__pyx_t_4)) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 138; __pyx_clineno = __LINE__; goto __pyx_L1_error;}
       __Pyx_GOTREF(__pyx_t_4);
@@ -3568,8 +3564,8 @@ static PyObject *__pyx_f_7ForcePy_12NeighborList_12NeighborList__build_exclusion
  *         #build 1,2 terms
  *         if u.bonds is not None:
  *             for b in u.bonds:             # <<<<<<<<<<<<<<
- *                 self.exclusion_list[b.atom1.number].append(b.atom2.number)
- *                 self.exclusion_list[b.atom2.number].append(b.atom1.number)
+ *                 self.exclusion_list[b[0].number].append(b[1].number)
+ *                 self.exclusion_list[b[1].number].append(b[0].number)
  */
     }
     __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
@@ -3578,7 +3574,7 @@ static PyObject *__pyx_f_7ForcePy_12NeighborList_12NeighborList__build_exclusion
   __pyx_L7:;
 
   /* "ForcePy/NeighborList.pyx":140
- *                 self.exclusion_list[b.atom2.number].append(b.atom1.number)
+ *                 self.exclusion_list[b[1].number].append(b[0].number)
  *         # build 1,3 and 1,4
  *         for i in range( 1 if self.exclude_14 else 2):             # <<<<<<<<<<<<<<
  *             #copy
@@ -6602,8 +6598,6 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_ValueError, __pyx_k_ValueError, sizeof(__pyx_k_ValueError), 0, 0, 1, 1},
   {&__pyx_n_s_append, __pyx_k_append, sizeof(__pyx_k_append), 0, 0, 1, 1},
   {&__pyx_n_s_arange, __pyx_k_arange, sizeof(__pyx_k_arange), 0, 0, 1, 1},
-  {&__pyx_n_s_atom1, __pyx_k_atom1, sizeof(__pyx_k_atom1), 0, 0, 1, 1},
-  {&__pyx_n_s_atom2, __pyx_k_atom2, sizeof(__pyx_k_atom2), 0, 0, 1, 1},
   {&__pyx_n_s_atoms, __pyx_k_atoms, sizeof(__pyx_k_atoms), 0, 0, 1, 1},
   {&__pyx_n_s_bonds, __pyx_k_bonds, sizeof(__pyx_k_bonds), 0, 0, 1, 1},
   {&__pyx_n_s_cProfile, __pyx_k_cProfile, sizeof(__pyx_k_cProfile), 0, 0, 1, 1},

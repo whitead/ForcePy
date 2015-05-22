@@ -134,8 +134,8 @@ cdef class NeighborList(object):
         #build 1,2 terms
         if u.bonds is not None:
             for b in u.bonds:                
-                self.exclusion_list[b.atom1.number].append(b.atom2.number)
-                self.exclusion_list[b.atom2.number].append(b.atom1.number)
+                self.exclusion_list[b[0].number].append(b[1].number)
+                self.exclusion_list[b[1].number].append(b[0].number)
         # build 1,3 and 1,4
         for i in range( 1 if self.exclude_14 else 2):
             #copy

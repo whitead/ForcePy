@@ -112,8 +112,8 @@ class Bond(ForceCategory):
         self.nlist_lengths = np.empty(u.atoms.numberOfAtoms(), dtype=np.int32)
         nlist_accum = 0
         for b in u.bonds:
-            temp[b.atom1.number].append(b.atom2.number)
-            temp[b.atom2.number].append(b.atom1.number)
+            temp[b[0].number].append(b[1].number)
+            temp[b[1].number].append(b[0].number)
 
         #unwrap the bond list to make it look like neighbor lists
         for i,bl in zip(range(u.atoms.numberOfAtoms()), temp):

@@ -178,7 +178,7 @@ class CGUniverse(Universe):
         if(self.chydrogens):
             for b in self.fgref_u.bonds:
                 #my hack for inferring a hydrogen
-                for a1,a2 in [(b.atom1, b.atom2), (b.atom2, b.atom1)]:
+                for a1,a2 in [(b[0], b[1]), (b[1], b[0])]:
                     if(a1.type.startswith('H') and a1.mass < 4.):
                         fgtocg_incl_map[a1] = fgtocg_incl_map[a2]
                         #add the mass
@@ -223,21 +223,18 @@ class CGUniverse(Universe):
         #add bonds using the reverse map
         #There is new syntax in 0.92 that uses topolgy groups instead of lists.
         #delete using attribute 
-        bonds = []
-        print self.fgref_u.bonds        
+        del self.bonds
         for b in self.fgref_u.bonds:
             try:
-                cgatom1 = fgtocg_incl_map[b.atom1]
-                cgatom2 = fgtocg_incl_map[b.atom2]
+                cgatom1 = fgtocg_incl_map[b[0]]
+                cgatom2 = fgtocg_incl_map[b[1]]
                 for cbg in self.bonds:
-                    if(not (cbg.atom1 in [cgatom1, cgatom2]) and not( cbg.atom2 in [cgatom1, cgatom2])):
+                    if(not (cbg[0] in [cgatom1, cgatom2]) and not( cbg[1] in [cgatom1, cgatom2])):
                     #OK, no bond exists yet
-                        bonds.append( Bond(cgatom1, cgatom2) )
+                        self.bonds += Bond( (cgatom1, cgatom2) )
             except KeyError:
                 #was not in selection
                 pass
-        #set with attribute
-        self.bonds = bonds
 
         self.__trajectory = CGReader(self, self.fgref_u.trajectory, self.pos_map, self.force_map, self.lfdump, self.lfdump_map)
         for a in self.atoms:
@@ -666,14 +663,14 @@ def add_residue_bonds(universe, selection1, selection2):
     '''This function will add bonds between atoms mathcing selections and 2
     within any residue
     '''
-    count = 0
+    count = 0 
     for r in universe.atoms.residues:        
         group1 = r.selectAtoms(selection1)
         group2 = r.selectAtoms(selection2)            
         for a1 in group1:
             for a2 in group2:
                 if(a1 != a2):
-                    universe.bonds.append( Bond(a1, a2) )
+                    universe.bonds += Bond( (a1, a2) )
                     count += 1
     print 'Added %d bonds' % count
 
@@ -687,7 +684,7 @@ def add_residue_bonds_table(universe, table, residue_name):
         if(r.name != residue_name):
             continue
         for row in table:
-            universe.bonds.append( Bond(r[row[0]], r[row[1]]) )
+            universe.bonds += ( Bond(r[row[0]], r[row[1]]) )
             count += 1
     print 'Added %d bonds' % count
             

@@ -43,7 +43,15 @@ class CGUniverse(Universe):
         universe residue indices.
     '''
 
-    def __init__(self, otherUniverse, selections, names = None, collapse_hydrogens = False, lammps_force_dump = None, residue_reduction_map = None):        
+    def __init__(self, otherUniverse, selections, names = None, collapse_hydrogens = False, lammps_force_dump = None, residue_reduction_map = None):
+        #this line of code here should work,
+        super(Universe, self).__init__()
+        #but I don't know why it doesn't. So instead I also do this:
+        self._cache = dict()
+        self._topology = dict()
+        self.atoms = AtomGroup([])
+
+
         if(names is None):
             names = [ '%dX' % x for x in range(len(selections))]
         if(len(names) != len(selections)):
@@ -213,7 +221,10 @@ class CGUniverse(Universe):
         self.force_map = self.force_map.tobsr()
                                     
         #add bonds using the reverse map
-        self.bonds = []
+        #There is new syntax in 0.92 that uses topolgy groups instead of lists.
+        #delete using attribute 
+        bonds = []
+        print self.fgref_u.bonds        
         for b in self.fgref_u.bonds:
             try:
                 cgatom1 = fgtocg_incl_map[b.atom1]
@@ -221,10 +232,12 @@ class CGUniverse(Universe):
                 for cbg in self.bonds:
                     if(not (cbg.atom1 in [cgatom1, cgatom2]) and not( cbg.atom2 in [cgatom1, cgatom2])):
                     #OK, no bond exists yet
-                        self.bonds.append( Bond(cgatom1, cgatom2) )
+                        bonds.append( Bond(cgatom1, cgatom2) )
             except KeyError:
                 #was not in selection
                 pass
+        #set with attribute
+        self.bonds = bonds
 
         self.__trajectory = CGReader(self, self.fgref_u.trajectory, self.pos_map, self.force_map, self.lfdump, self.lfdump_map)
         for a in self.atoms:

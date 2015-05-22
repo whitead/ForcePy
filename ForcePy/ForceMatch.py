@@ -41,7 +41,7 @@ class ForceMatch:
         else:
             self.json = []
         self.force_match_calls = 0
-        self.plot_frequency = -1 if plotting_support else -1
+        self.plot_frequency = 1 if plotting_support else -1
         self.plot_output = None
         self.atom_type_map = None
         self.tar_force_buffer = None
@@ -54,27 +54,6 @@ class ForceMatch:
         with open(input_file, 'r') as f:
             self.json = json.load(f)
         self._test_json(self.json, [])
-
-        if("observable" in self.json):
-            self._test_json(self.json, [('kT', 'Boltzmann\'s constant times temperature'), 
-                                        ('observable', 'File containing one column where the number of rows is equal to frames. First column is total potential energy')])
-
-            self.kt = self.json['kT']
-            assert type(self.kt) == type(0.), 'kT must be a floating point number'
-
-            self.do_obs = True
-            self.obs = [0 for x in range(self.u.trajectory.numframes)]
-            with open(self.json['observable'], 'r') as f:
-                lines = f.readlines()
-                if(len(lines) < len(self.obs)):
-                    raise IOError('Number of the frames (%d) does not match number of lines in observation file (%d)' %
-                                  (len(self.obs), len(lines)))
-                for i, line in zip(range(len(self.obs)), lines[:len(self.obs)]):
-                    self.obs[i] = float(line.split()[0])
-
-            if('target_observable' in self.json):
-                self.target_obs = self.json['target_observables']
-                assert type(self.target_obs) == type(0.), 'observable target must be a floating point number'
 
         if('box' in self.json):
             if(len(self.json['box']) != 3):
@@ -251,6 +230,7 @@ class ForceMatch:
 
 
     def force_match(self, iterations = 0):
+
 
         if(iterations == 0):
             iterations = self.u.trajectory.numframes
@@ -437,210 +417,6 @@ class ForceMatch:
             else:
                 self._force_match_task(rank * span + spanr, (rank + 1) * span + spanr, rank == 0 and not quiet)
 
-    def _setup_obs_buffers(self):
-        #     0          1           2                3-->
-        #sample-index  weight weighted-sample   weighted-gradients
-        buffer_size = 3
-        for f in self.tar_forces:
-            buffer_size += len(f.temp_grad[:,1])
-        #we need to use the buffer to store from a gather too, so check that size
-        if(mpi_support):
-            comm = MPI.COMM_WORLD
-            size = comm.Get_size()
-            if(buffer_size < size):
-                buffer_size = size
-
-        self.send_buffer = np.empty((buffer_size,), dtype=np.float32)
-        self.rec_buffer = np.copy(self.send_buffer)
-
-    def _sample_observation_task(self):
-        index = self._sample_ts() #sample a trajectory frame
-        self._setup()
-
-        #get weight
-        dev_energy = 0
-        for f in self.tar_forces:
-            dev_energy -= f.calc_potentials(self.u)
-
-        buffer_index = 0
-        self.send_buffer[buffer_index] = index
-        buffer_index += 1
-
-        #energy diff
-        self.send_buffer[buffer_index] = dev_energy
-        buffer_index += 1
-
-        #store gradient and observables.
-        self.send_buffer[buffer_index] = self.obs[index]
-        buffer_index += 1
-        #we use the index of 1 here because temp_grad normally stores
-        #an M x 3 gradient for each dimension. There is no direction
-        #though with the potential functional derivative
-        for f in self.tar_forces:
-            gsize = len(f.temp_grad[:,1])
-            self.send_buffer[buffer_index:(buffer_index + gsize)] = self.kt * f.temp_grad[:,1]
-            buffer_index += gsize
-
-        self._teardown()
-        
-    def _observation_match_mpi_step(self, target_obs, curvature, do_print = True):
-        comm = MPI.COMM_WORLD
-        size = comm.Get_size()
-        rank = comm.Get_rank()
-        
-        #sample covariances, unweighted
-        self._sample_observation_task()        
-
-        #find minimum, so we know the offset between them
-        #deal with confusing and stupid mpi4py syntax
-        data_send = np.array(self.send_buffer[1], dtype=np.float32)
-        data_receive = np.empty(1, dtype=np.float32)
-        comm.Allreduce([data_send, MPI.FLOAT], [data_receive, MPI.FLOAT], op=MPI.MAX)
-
-        
-        #now do weighting
-        self.send_buffer[1] = exp((self.send_buffer[1] - data_receive[0]) / self.kt)
-        #reuse data_send to store information about 0-weighted frames
-        data_send = np.array(self.send_buffer[1] < 0.0000001, dtype=np.float32)
-        comm.Allreduce([data_send, MPI.FLOAT], [data_receive, MPI.FLOAT], op=MPI.SUM)
-
-
-        #before going further, check if we got enough accepted frames (> 1)
-        if(size - data_receive[0] <= 3):
-            #not close enough
-            #update results
-            if rank == 0:
-                print "{:<16} {:<16} {:<16} {:<16}" .format(sum(self.obs) / len(self.obs), 'NA', target_obs, int(size - data_receive[0]))
-
-            return False            
-
-
-        #looks good, let's reweight and continue
-        self.send_buffer[2:] *= self.send_buffer[1]
-        self.rec_buffer.fill(0)
-        comm.Reduce([self.send_buffer, MPI.FLOAT], [self.rec_buffer, MPI.FLOAT], op=MPI.SUM)
-
-        #now average results
-        if rank == 0:
-            normalization = self.rec_buffer[1]
-            self.rec_buffer[2:] /= normalization
-            meanobs = self.rec_buffer[2]
-
-        #update results
-        if rank == 0:
-            print "{:<16} {:<16} {:<16} {:<16}" .format(sum(self.obs) / len(self.obs), meanobs, target_obs, int(size - data_receive[0]))
-
-        self.rec_buffer = comm.bcast(self.rec_buffer)
-
-        #now, the second pass covariance calculation
-        buffer_index = 3
-        for f in self.tar_forces:
-            l = buffer_index
-            r = buffer_index + len(f.temp_grad[:,1])
-            #the rec_buffer contains expected values.
-            self.send_buffer[l:r] = (f.temp_grad[:,1] - self.rec_buffer[l:r]) * (self.obs[int(self.send_buffer[0])] - self.rec_buffer[2])
-            buffer_index = r
-            
-        #reduce the covariances
-        self.rec_buffer.fill(0)
-        comm.Reduce([self.send_buffer, MPI.FLOAT], [self.rec_buffer, MPI.FLOAT], op=MPI.SUM)
-        
-        #normalize them
-        if rank == 0:
-            self.rec_buffer[2:] /= normalization            
-            #These are the new w_gradients
-            #do update
-            buffer_index = 3
-            for curve, f in zip(curvature, self.tar_forces):
-                l = buffer_index
-                r = buffer_index + len(f.temp_grad[:,1])
-                grad = self.rec_buffer[l:r]
-                #target comes in here
-                grad = -2 * (meanobs - target_obs) * grad
-
-                #apply any regularization
-                for r in f.regularization:
-                    grad += r[0](f.w)
-
-                #update
-                f.lip += np.square(grad)
-                f.w = f.w - f.eta * curve / np.sqrt(f.lip) * grad
-                f.update_avg()                
-
-                buffer_index = r
-            #pack forces for node 0
-            self._pack_tar_forces()
-    
-        #now we update w for everyone by sending the packed node 0 forces
-        self.rec_buffer = comm.bcast(self.send_buffer)
-        self._unpack_tar_forces()
-                
-        return True
-            
-        
-        
-    
-                            
-    def observation_match_mpi(self, target_obs = None,
-                              obs_sweeps = 25, do_plots = True,
-                              curve_regularize=True):
-        """ Match observations.
-        """
-
-        comm = MPI.COMM_WORLD
-        size = comm.Get_size()
-        rank = comm.Get_rank()
-
-        
-        #check for obs_samples
-        try:
-            self.obs
-        except AttributeError:
-            raise ValueError("Must set observations before calling observation match")  
-
-        if(target_obs is None):
-            try:
-                target_obs = self.target_obs
-            except AttributeError:
-                if(rank == 0):
-                    print "Assuming maintainance of observation mean is desired"
-                target_obs = sum(self.obs) / len(self.obs)
-                
-        #Move areas only where there exists curvature
-        if(curve_regularize):
-            curvature = [np.power(f.w_avg, 2) for f in self.tar_forces]
-        else:
-            curvature = [np.ones(np.size(f.w_avg), dtype=np.float32) for f in self.tar_forces]
-
-        do_plots = do_plots and rank == 0
-        if(do_plots):
-            self._setup_plot()
-
-        self._setup_obs_buffers()
-
-        if(rank == 0):
-            print "{:<16} {:<16} {:<16} {:<16}" .format("observed" , "reweighted", "target", "acceptance")
-
-        for s in range(obs_sweeps):
-
-            #make plots
-            if(do_plots and rank == 0):
-                self._plot_forces()
-            
-            while(not self._observation_match_mpi_step(target_obs, curvature)):
-#                if(rank == 0):
-#                    print "Rejection rate of frames is too high, restarting force matching"
-                self.force_match_mpi(do_plots=False, quiet=True)
-#                if(rank == 0):
-#                    print "{:<16} {:<16} {:<16} {:<16}" .format("observed" , "reweighted", "target", "acceptance")
-
-
-             #make plots
-            if(do_plots):
-                self._plot_forces()
-
-        if(do_plots):
-            self._teardown_plot()            
 
     def _teardown_plot(self):
         plt.close()
@@ -678,6 +454,7 @@ class ForceMatch:
         plt.show()
         plt.ioff()
         
+                
 
     def _plot_forces(self):
         for f in self.tar_forces:

@@ -52,7 +52,6 @@ cdef class NeighborList(object):
     def __init__(self, u, cutoff, exclude_14 = True):
         
         #set up cell number and data
-        print 'EHLLO'
         
         self.cutoff = cutoff
         self.box = <double* > malloc(3 * sizeof(double))
@@ -63,7 +62,6 @@ cdef class NeighborList(object):
             self.box[i] = u.dimensions[i]
             self.cell_number[i] = max(1,int(self.box[i] / self.cutoff))
             self.cell_number_total *= self.cell_number[i]
-            print 'Found', self.cell_number[i], 'cells'
 
         self.nlist_lengths = [0 for x in range(u.atoms.numberOfAtoms())]
         self.nlist = np.arange(u.atoms.numberOfAtoms() * (u.atoms.numberOfAtoms() - 1), dtype=DTYPE)
@@ -123,10 +121,9 @@ cdef class NeighborList(object):
                 k = floor(k % self.cell_number[j])      
                 icell =  <int> k + icell * self.cell_number[j]
             #push what is on the head into the cells
-
             self.cells[i] = self.head[icell]
             #add current value
-            self.head[icell] = i
+            self.head[icell] = i            
 
 
     cdef _build_exclusion_list(self, u):
@@ -136,7 +133,7 @@ cdef class NeighborList(object):
         temp_list = [[] for x in range(u.atoms.numberOfAtoms())]
         #build 1,2 terms
         if u.bonds is not None:
-            for b in u.bonds:
+            for b in u.bonds:                
                 self.exclusion_list[b.atom1.number].append(b.atom2.number)
                 self.exclusion_list[b.atom2.number].append(b.atom1.number)
         # build 1,3 and 1,4
@@ -154,22 +151,19 @@ cdef class NeighborList(object):
         if(self.exclusion_list == None):
             self._build_exclusion_list(u)
 
-        #bin the particles
+        #bin the particles        
         self.bin_particles(u)
 
         ntime = time.time()
         positions = u.atoms.get_positions(copy=False)
 
-        print 'here'
         cdef int i, j, nlist_count, icell
         cdef double k
         nlist_count = 0
         for i in range(u.atoms.numberOfAtoms()):
             self.nlist_lengths[i] = 0
 
-        print 'here'
         periodic = u.trajectory.periodic
-        print u.atoms.numberOfAtoms()
         for i in range(u.atoms.numberOfAtoms()):
             icell = 0
             #fancy indepx and binning loop over dimensions
@@ -178,17 +172,12 @@ cdef class NeighborList(object):
                 k = positions[i][j]/ self.box[j] * self.cell_number[j]
                 k = floor(k % self.cell_number[j])      
                 icell =  int(k) + icell * self.cell_number[j]
-            print icell
             for ncell in self.cell_neighbors[icell]:
-                print ncell
                 j = self.head[ncell]
                 while(j != - 1):
-                    if(i != j):
-                        print 'Comparing particles', i,'and',j,'which have a dist of', \
-                            min_img_dist_sq(positions[i], positions[j], self.box, periodic)
                     if(i != j and
                        not (j in self.exclusion_list[i]) and
-                       min_img_dist_sq(positions[i], positions[j], self.box, periodic) < self.cutoff ** 2):
+                        min_img_dist_sq(positions[i], positions[j], self.box, periodic) < self.cutoff ** 2):
                         self.nlist[nlist_count] = j
                         self.nlist_lengths[i] += 1
                         nlist_count += 1

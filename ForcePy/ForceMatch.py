@@ -41,7 +41,7 @@ class ForceMatch:
         else:
             self.json = []
         self.force_match_calls = 0
-        self.plot_frequency = 1 if plotting_support else -1
+        self.plot_frequency = -1 if plotting_support else -1
         self.plot_output = None
         self.atom_type_map = None
         self.tar_force_buffer = None
@@ -267,10 +267,8 @@ class ForceMatch:
             
             #set box if necessary
             if("box" in self.json):
-                #strange ordering due to charm
-                self.u.trajectory.ts._unitcell[0] = self.json["box"][0]
-                self.u.trajectory.ts._unitcell[2] = self.json["box"][1]
-                self.u.trajectory.ts._unitcell[5] = self.json["box"][2]
+                #strange ordering due to charm in previous MDAnalysis versions was 0,2,5
+                self.u.trajectory.ts.dimensions = self.json["box"] + [90, 90 ,90]
 
             self._setup()
 
@@ -339,11 +337,9 @@ class ForceMatch:
             
             #set box if necessary
             if("box" in self.json):
-                #strange ordering due to charm
-                self.u.trajectory.ts._unitcell[0] = self.json["box"][0]
-                self.u.trajectory.ts._unitcell[2] = self.json["box"][1]
-                self.u.trajectory.ts._unitcell[5] = self.json["box"][2]
-
+                #strange ordering due to charm in previous MDAnalysis versions was 0,2,5
+                self.u.trajectory.ts.dimensions = self.json["box"] + [90, 90 ,90]
+                
             self._setup()
 
             for rf in self.ref_forces:

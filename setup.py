@@ -125,7 +125,7 @@ if __name__ == '__main__':
           # all standard requirements are available through PyPi and
           # typically can be installed without difficulties through setuptools
           install_requires = ['numpy>=1.0.3',   # currently not useful because without numpy we don't get here
-                              'MDAnalysis>=0.9.2' # Development version is currently required, so not good.
+                              'MDAnalysis>=0.10.0-dev' # Development version is currently required, so not good.
                               ],
           # extras can be difficult to install through setuptools and/or
           # you might prefer to use the version available through your

@@ -410,8 +410,6 @@ class XYZFileForce(Force):
     def __reduce__(self):
         return XYZFileForce, (self.file_name, self.frames_read)
 
-
-
 class AnalyticForce(Force):
     """ A pairwise analtric force that takes in a function for
     calculating the force. The function passed should accept the
@@ -433,7 +431,7 @@ class AnalyticForce(Force):
         self._setup_update_params(n)        
         self.category = category.get_instance(cutoff)
         self.cutoff = cutoff
-        self._long_name = "AnalyticForce for %s" % category.__name__
+        self._long_name = "AnalyticForce for %s" %  category.__name__
         self._short_name = "AF_%s" % category.__name__
 
 
@@ -470,7 +468,6 @@ class AnalyticForce(Force):
             return 0
 
         positions = u.atoms.get_positions()
-        nlist_accum = 0
         potential = 0
         dims = u.trajectory.ts.dimensions
         for i in range(u.atoms.numberOfAtoms()):
@@ -486,14 +483,12 @@ class AnalyticForce(Force):
                 if(i < j):
                     continue
                 potential += self.call_potential(d,self.w)
-            nlist_accum += self.category.nlist_lengths[i]
         return potential
                                      
 
     def calc_forces(self, forces, u):
         
         positions = u.atoms.get_positions()
-        nlist_accum = 0
         dims = u.trajectory.ts.dimensions
         for i in range(u.atoms.numberOfAtoms()):
             #check atom types
@@ -505,8 +500,6 @@ class AnalyticForce(Force):
                 continue
             for r,d,j in self.category.generate_neighbor_vecs(i, u, maskj):
                 forces[i] += self.call_force(d,self.w) * (r / d)
-            nlist_accum += self.category.nlist_lengths[i]
-
 
     def calc_particle_force(self, i, u):
 

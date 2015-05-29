@@ -14,6 +14,12 @@ class ForceCategory(object):
     def __init__(self):
         self.nlist_ready = False
 
+    def _setup(self, u):
+        pass
+
+    def _teardown(self):
+        pass    
+
     def generate_nlist(self, i):
         assert self.nlist_ready, "Neighbor list not built yet"
         nlist_accum = np.sum(self.nlist_lengths[:i]) if i > 0  else 0
@@ -44,6 +50,37 @@ class Dihedral(ForceCategory):
 
 class Improper(ForceCategory):
     pass
+
+class Global(ForceCategory):
+    """Creates a global vector that acts on all particles. Calling generate neighbor vecs returns the outer and inner products"""
+    
+    _vector = np.array([0,0,0], dtype='f')
+    
+    def get_instance(self, *args):
+        #we will never be static        
+        return self
+
+    def __init__(self, vector):
+        super(Global, self).__init__()
+        self._vector = np.array(vector)
+        self.nlist_ready = True
+
+    def generate_neighbor_vecs(self, i, u, mask = None):
+        positions = u.atoms.get_positions()
+        dims = u.trajectory.ts.dimensions
+
+        r = np.cross(self._vector, positions[i])        
+        d = np.inner(self._vector, positions[i])
+        yield (r,d,-1)
+
+    @property
+    def __name__(self):
+        return 'Global {} {} {}'.format(self._vector[0], self._vector[1], self._vector[2])
+
+    def pair_exists(self, u, type1, type2):
+        return False
+
+
 
 class Pairwise(ForceCategory):
     """Pairwise force category. It handles constructing a neighbor-list at each time-step. 

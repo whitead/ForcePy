@@ -1,4 +1,4 @@
-from ForcePy.ForceMatch import ForceMatch, Pairwise, Bond
+from ForcePy.ForceMatch import ForceMatch, Pairwise, Bond, Global
 from ForcePy.Analysis import RDF, CoordNumber
 from ForcePy.Forces import FileForce, XYZFileForce, AnalyticForce, SpectralForce, SmoothRegularizer, L2Regularizer, LJForce, HarmonicForce, FixedHarmonicForce
 import ForcePy.Mesh as Mesh

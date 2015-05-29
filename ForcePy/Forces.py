@@ -202,7 +202,7 @@ class Force(object):
             potential_ax.plot(self.plot_x, true_potential_a, color="green")
 
         #plot force and save reference to line
-        self.force_line, = force_ax.plot(self.plot_x, self.plot_force, color="blue")
+        self.force_line, = force_ax.plot(self.plot_x, self.plot_force, color="blue", label="Force")
 
         force_ax.set_ylim(-1.1*min(-min(self.plot_force), max(self.plot_force)), 1.1*max(self.plot_force))
 
@@ -210,13 +210,15 @@ class Force(object):
         try:
             self.plot_potential = np.empty( len(self.plot_x) )
             self.calc_potential_array(self.plot_x, self.plot_potential)
-            self.potential_line, = self.potential_ax.plot(self.plot_x, self.plot_potential, color="red")
+            self.potential_line, = self.potential_ax.plot(self.plot_x, self.plot_potential, color="red", label="Potential")
             if(self.force_ax == self.potential_ax):
                 self.potential_ax.set_ylim(min(1.1*min(min(self.plot_potential), -max(self.plot_potential)), -1.1*min(-min(self.plot_force), max(self.plot_force))), max(1.1*max(self.plot_force), 1.1*max(self.plot_potential)))
             else:
                 self.potential_ax.set_ylim(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*max(self.plot_potential))
         except NotImplementedError:
             self.plot_potential = None
+        #add legend
+        force_ax.legend()
 
 
     def update_plot(self):

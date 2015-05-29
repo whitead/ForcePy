@@ -6,7 +6,6 @@ from MDAnalysis import Universe
 from math import *
 import ForcePy.ForceCategories as ForceCategories
 try:
-    import matplotlib.mlab as mlab
     import matplotlib.pyplot as plt
     plotting_support = True
 except ImportError as e:
@@ -226,7 +225,10 @@ class ForceMatch:
 
         if(rank == 0):
             if(do_plots):
+                if(not self.plot_output is None):
+                    self._save_plot()
                 self._teardown_plot()
+
 
 
     def force_match(self, iterations = 0):
@@ -451,8 +453,10 @@ class ForceMatch:
         plot_h = ceil(plot_w * 9. / 16.)
         for i in range(len(self.tar_forces)):
             self.tar_forces[i].plot(plt.subplot(plot_w, plot_h, i+1))
-        plt.show()
-        plt.ioff()
+        if(self.plot_output is None):
+            plt.show()
+            plt.ioff()
+
         
                 
 
@@ -462,7 +466,7 @@ class ForceMatch:
         plt.draw()
 
     def _save_plot(self):
-        plot_fig.tight_layout()
+        plt.tight_layout()
         plt.savefig(self.plot_output)
 
     def add_and_type_states(self, force, state_function, state_names):

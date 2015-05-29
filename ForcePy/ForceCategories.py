@@ -29,7 +29,9 @@ class ForceCategory(object):
                 continue
             r = min_img_vec(positions[j], positions[i], dims, u.trajectory.periodic)
             d = norm3(r)
-            r = r / d
+            #We do allow overlap here for cases when variable particle numbers
+            #are dealt with by creating overlapping particles
+            r = r if d == 0 else r / d
             yield (r,d,j)
 
         

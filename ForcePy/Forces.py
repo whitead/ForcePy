@@ -23,7 +23,7 @@ class Force(object):
         self.mask2 = None
 
     
-    def _setup_update_params(self, w_dim, initial_w=100, eta=None, hard_pow=12):
+    def _setup_update_params(self, w_dim, initial_w=100, eta=None, hard_pow=2):
         """ Assumes a line from given initial height down to zero. Basically repulsive force
         """
         self.eta = eta
@@ -354,7 +354,8 @@ class FileForce(Force):
 class LammpsFileForce(Force):
     """Reads forces from a lammps force output
     """
-    def LammpsFileForce(self, file_name):
+    def __init__(self, file_name):
+        super(LammpsFileForce, self).__init__()
         self.file = open(file_name, 'r')
 
     def calc_forces(self, forces, u):
@@ -369,6 +370,47 @@ class LammpsFileForce(Force):
             
     def clone_force(self):
           return LammpsFileForce(self.file.name)
+      
+
+class XYZFileForce(Force):
+    """Reads forces from a lammps force output
+    """
+    def __init__(self, file_name, skip=0):
+        super(XYZFileForce, self).__init__()
+        self.file_name = file_name
+        self.frames_read = 0
+        self.file = open(file_name, 'r')
+        for s in range(skip):
+            #read 2 header lines
+            self.file.readline()
+            self.file.readline()
+            #read the rest
+            while(len(self.file.readline().split()) == 4):
+                pass            
+            self.frames_read += 1
+            
+
+    def calc_forces(self, forces, u):
+        #read 2 header lines
+        self.file.readline()
+        self.file.readline()
+        
+        for i in range(len(forces)):
+            sline = self.file.readline().split()
+            try:
+                if(len(sline) < 3):
+                    break
+                forces[i] = [-float(x) for x in sline[1:]]
+            except ValueError:
+                print "Invalid forces line at %s" % reduce(lambda x,y: x + y, sline)
+                
+        self.frames_read += 1
+            
+    def clone_force(self):
+          return XYZFileForce(self.file.name)
+
+    def __reduce__(self):
+        return XYZFileForce, (self.file_name, self.frames_read)
 
 class AnalyticForce(Force):
     """ A pairwise analtric force that takes in a function for
@@ -391,7 +433,7 @@ class AnalyticForce(Force):
         self._setup_update_params(n)        
         self.category = category.get_instance(cutoff)
         self.cutoff = cutoff
-        self._long_name = "AnalyticForce for %s" % category.__name__
+        self._long_name = "AnalyticForce for %s" %  category.__name__
         self._short_name = "AF_%s" % category.__name__
 
 
@@ -428,7 +470,6 @@ class AnalyticForce(Force):
             return 0
 
         positions = u.atoms.get_positions()
-        nlist_accum = 0
         potential = 0
         dims = u.trajectory.ts.dimensions
         for i in range(u.atoms.numberOfAtoms()):
@@ -444,14 +485,12 @@ class AnalyticForce(Force):
                 if(i < j):
                     continue
                 potential += self.call_potential(d,self.w)
-            nlist_accum += self.category.nlist_lengths[i]
         return potential
                                      
 
     def calc_forces(self, forces, u):
         
         positions = u.atoms.get_positions()
-        nlist_accum = 0
         dims = u.trajectory.ts.dimensions
         for i in range(u.atoms.numberOfAtoms()):
             #check atom types
@@ -463,8 +502,6 @@ class AnalyticForce(Force):
                 continue
             for r,d,j in self.category.generate_neighbor_vecs(i, u, maskj):
                 forces[i] += self.call_force(d,self.w) * (r / d)
-            nlist_accum += self.category.nlist_lengths[i]
-
 
     def calc_particle_force(self, i, u):
 
@@ -655,10 +692,11 @@ class SpectralForce(Force):
     defined as so: def unit_step(x, mesh, height).
     """
     
-    def __init__(self, category, mesh, basis, initial_w=0, w_range=None):
+    def __init__(self, category, mesh, basis, initial_w=0, w_range=None, permit_overlap = False):
         super(SpectralForce, self).__init__()
         self.basis = basis
         self.mesh = mesh
+        self.permit_overlap = permit_overlap
         #create weights 
         self.temp_force = np.zeros( 3 )
         self.category = category.get_instance(mesh.max())
@@ -759,6 +797,8 @@ class SpectralForce(Force):
             else:
                 continue
             for r,d,j in self.category.generate_neighbor_vecs(i, u, maskj):
+                if(self.permit_overlap and d < 10**-50):
+                    continue
                 force = self.w.dot(self.basis.force(d, self.mesh)) * (r / d)
                 forces[i] += force
 

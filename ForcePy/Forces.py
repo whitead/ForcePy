@@ -169,14 +169,14 @@ class Force(object):
 
     def plot(self, force_ax, potential_ax = None, true_force = None, true_potential = None):
         #make a mesh finer than the mesh used for finding paramers
-        self.plot_x = np.arange( self.mind, self.maxd, (self.maxd - self.mind) / 1000. )
+        self.plot_x = np.arange( self.mind, self.maxd, (self.maxd - self.mind) / 100. )
         self.plot_force = np.empty( len(self.plot_x) )
-
 
         self.true_force = true_force
         self.true_potential = true_potential
         
         self.force_ax = force_ax
+        self.force_ax.set_ylabel('Force',color='b')
         
         #set the plot title        
         force_ax.set_title(self.name)
@@ -202,23 +202,31 @@ class Force(object):
             potential_ax.plot(self.plot_x, true_potential_a, color="green")
 
         #plot force and save reference to line
-        self.force_line, = force_ax.plot(self.plot_x, self.plot_force, color="blue", label="Force")
-
+        self.force_line, = self.force_ax.plot(self.plot_x, self.plot_force, color="blue", label="Force")
         force_ax.set_ylim(-1.1*min(-min(self.plot_force), max(self.plot_force)), 1.1*max(self.plot_force))
+        
+        from matplotlib.ticker import FormatStrFormatter
+        force_ax.yaxis.set_major_formatter(FormatStrFormatter('%0.3f'))      
 
         #plot potential if possible
         try:
             self.plot_potential = np.empty( len(self.plot_x) )
             self.calc_potential_array(self.plot_x, self.plot_potential)
+            self.potential_ax = self.force_ax.twinx()
+            self.potential_ax.set_ylabel('Potential',color='r')
             self.potential_line, = self.potential_ax.plot(self.plot_x, self.plot_potential, color="red", label="Potential")
+
             if(self.force_ax == self.potential_ax):
                 self.potential_ax.set_ylim(min(1.1*min(min(self.plot_potential), -max(self.plot_potential)), -1.1*min(-min(self.plot_force), max(self.plot_force))), max(1.1*max(self.plot_force), 1.1*max(self.plot_potential)))
             else:
                 self.potential_ax.set_ylim(1.1*min(min(self.plot_potential), -max(self.plot_potential)), 1.1*max(self.plot_potential))
+           
         except NotImplementedError:
             self.plot_potential = None
-        #add legend
-        force_ax.legend()
+
+
+        self.potential_ax.legend([self.force_line,self.potential_line],["Force","Potential"])
+                
 
 
     def update_plot(self):
@@ -231,6 +239,8 @@ class Force(object):
         if(not (self.plot_potential is None)):
             self.calc_potential_array(self.plot_x, self.plot_potential)
             self.potential_line.set_ydata(self.plot_potential)
+
+            
             if(self.force_ax == self.potential_ax):
                 self.potential_ax.set_ylim(min(1.1*min(min(self.plot_potential), -max(self.plot_potential)), -1.1*min(-min(self.plot_force), max(self.plot_force))), max(1.1*max(self.plot_force), 1.1*max(self.plot_potential)))
             else:

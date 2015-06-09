@@ -654,6 +654,33 @@ class ForceMatch:
         return "".join(string)
         
         
+    def write_hoomd_tables(self, prefix, force_conv=1, energy_conv=1, dist_conv=1, points=1000):
+        
+        if(mpi_support):
+            #check if we're running with MPI
+            comm = MPI.COMM_WORLD
+            rank = comm.Get_rank()
+
+            if(rank != 0):
+                return
+                
+        #table file names
+        table_names = {}
+        table_names[Pairwise] = open("%s_pair.table" % prefix, 'w')
+        table_names[Bond] = open("%s_bond.table" % prefix, 'w')
+        table_names[Angle] = open("%s_angle.table" % prefix, 'w')
+        table_names[Dihedral] = open("%s_dihedral.table" % prefix, 'w')
+        
+        #write the files, one file for each category
+        for rf in self.tar_forces:
+            of = table_names[type(rf.category)]
+            rf.write_hoomd_table(of, force_conv, energy_conv, dist_conv,points)
+            
+        for f in table_names:
+            table_names[f].close()
+
+        return ''
+
 
     def get_pair_type_index(self, atom1, atom2):
         """Return the index of the pairwise force for this pair

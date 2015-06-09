@@ -261,7 +261,7 @@ class Force(object):
             del self.potential_line
         except AttributeError:
             pass
-
+ 
     def write_lammps_table(self, outfile, force_conv=1., energy_conv=1., dist_conv=1., points=10000):
         import os
         """Write the current forcefield to the given outfile.
@@ -290,6 +290,28 @@ class Force(object):
             outfile.write("N %d RADIANS\n\n" % (len(rvals)))
         for i in range(len(rvals)):
             outfile.write("%d %f %f %f\n" % (i+1, dist_conv * rvals[i], energy_conv * potential[i], force_conv * force[i]))
+            
+                       
+    def write_hoomd_table(self, outfile, force_conv=1., energy_conv=1., dist_conv=1., points=1000):
+        """Write the forcefield to hoomd readable outfile.
+        """
+        
+        #open
+        if(type(outfile ) == type('')):
+            outfile = open(outfile, 'w')
+            
+        #setup table
+        rvals = np.arange( self.mind, self.maxd, (self.maxd - self.mind) / float(points))
+        force = np.empty( len(rvals) )
+        potential = np.empty( len(rvals) )
+        
+        self.calc_force_array(rvals, force)
+        self.calc_potential_array(rvals, potential)
+        
+        #write table
+        for i in range(len(rvals)):
+            outfile.write("%f %f %f\n" % (dist_conv * rvals[i], energy_conv * potential[i], force_conv * force[i]))
+        
                       
     def write_table(self, outfile, force_conv=1., energy_conv=1., dist_conv=1., points=10000):
         outfile.write('#%s\n\n' % self.name)

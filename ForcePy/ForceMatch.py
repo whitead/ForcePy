@@ -579,9 +579,12 @@ class ForceMatch:
         
         #write the files, one file for each category
         for rf in self.tar_forces:
-            of = table_names[type(rf.category)]
-            rf.write_lammps_table(of, force_conv, energy_conv, dist_conv,points)
-            of.write("\n\n")
+            try:
+                of = table_names[type(rf.category)]
+                rf.write_lammps_table(of, force_conv, energy_conv, dist_conv,points)
+                of.write("\n\n")
+            except KeyError:
+                print "Don't know how to write a table for {}".format(type(rf.category))
             
         for f in table_names:
             table_names[f].close()
@@ -601,17 +604,17 @@ class ForceMatch:
                                                                    self.get_atom_type_index(f.sel2),
                                                                    table_names[Pairwise].name,
                                                                    f.short_name,
-                                                                   f.maxd))
+                                                                   f.maxd * dist_conv))
                 except AttributeError:
                     try:
                         string.append("pair_coeff * %d %s %s %g\n" % (self.get_atom_type_index(f.sel1),
                                                                       table_names[Pairwise].name,
                                                                       f.short_name,
-                                                                      f.maxd))
+                                                                      f.maxd * dist_conv))
                     except AttributeError:
                         string.append("pair_coeff * * %s %s %g\n" % (table_names[Pairwise].name,
                                                                      f.short_name,
-                                                                     f.maxd))
+                                                                     f.maxd * dist_conv))
         #bonds
         index = 0
         for f in self.tar_forces:
@@ -673,8 +676,11 @@ class ForceMatch:
         
         #write the files, one file for each category
         for rf in self.tar_forces:
-            of = table_names[type(rf.category)]
-            rf.write_hoomd_table(of, force_conv, energy_conv, dist_conv,points)
+            try:
+                of = table_names[type(rf.category)]
+                rf.write_hoomd_table(of, force_conv, energy_conv, dist_conv,points)
+            except KeyError:
+                print "Don't know how to write a table for {}".format(type(rf.category))
             
         for f in table_names:
             table_names[f].close()
@@ -735,12 +741,12 @@ class ForceMatch:
         for f in self.tar_forces:
             try:
                 type_count[f.category.__class__] += 1
-            except AttributeError:
+            except (AttributeError, KeyError):
                 pass
         return type_count
 
         
-    def write_lammps_scripts(self, prefix='cg', folder = os.curdir, lammps_units="real", table_points=10000, lammps_input_file=None, force_conversion = 1.0, energy_conversion=None):
+    def write_lammps_scripts(self, prefix='cg', folder = os.curdir, lammps_units="real", table_points=10000, lammps_input_file_head=None, lammps_input_file=None, force_conv=1.0, dist_conv=1.0, energy_conv=1.0, create_data_file=True):
         """Using the given ForceMatch and Universe object, this will create a set of input files for Lammps.
     
         The function will create the given folder and put all files
@@ -759,9 +765,13 @@ class ForceMatch:
                 return
                 
 
-        #before we change directories, we need to get the path of the lammps input file 
+        #before we change directories, we need to get the path of the lammps input files
         if(lammps_input_file is not None):
             lammps_input_file = os.path.abspath(lammps_input_file)
+
+        if(lammps_input_file_head is not None):
+            lammps_input_file_head = os.path.abspath(lammps_input_file)
+
 
         if(not os.path.exists(folder)):
             os.mkdir(folder)
@@ -770,25 +780,35 @@ class ForceMatch:
  
         #write force tables
         force_info = self.write_lammps_tables('%s_force' % prefix, 
-                                        force_conv = force_conversion,
-                                        energy_conv = energy_conversion if energy_conversion else force_conversion,
-                                        dist_conv = 1,
+                                        force_conv = force_conv,
+                                        energy_conv = energy_conv,
+                                        dist_conv = dist_conv,
                                         points=table_points)
 
         #write data file                   
         #determin sim type
         type_count = self.get_force_type_count()
-        
-        sim_type = write_lammps_data(self.u, '%s_fm.data' % prefix, bonds=type_count[ForceCategories.Bond] > 0,
+
+        if(create_data_file):
+            sim_type = write_lammps_data(self.u, '%s_fm.data' % prefix, bonds=type_count[ForceCategories.Bond] > 0,
                           angles=type_count[ForceCategories.Angle] > 0, dihedrals=False, impropers=False, 
                                      force_match=self)
             
         #alright, now we prepare an input file
         with open("%s_fm.inp" % prefix, 'w') as output:
+
+            #If we have a header for the lammps input file, write that
+            if(lammps_input_file_head is not None):
+                with open(lammps_input_file_head, 'r') as infile:
+                    for line in infile.readlines():
+                        output.write(line)
+                        
+            #now write our stuff
             output.write("#Lammps input file generated by ForcePy\n")
-            output.write("units %s\n" % lammps_units)
-            output.write("atom_style %s\n" % sim_type)
-            output.write("read_data %s_fm.data\n" % prefix)            
+            if(create_data_file):
+                output.write("units %s\n" % lammps_units)
+                output.write("atom_style %s\n" % sim_type)
+                output.write("read_data %s_fm.data\n" % prefix)            
             output.write(force_info)
             output.write("\n")
             

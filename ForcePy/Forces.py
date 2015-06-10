@@ -283,7 +283,7 @@ class Force(object):
 
         #header parameters
         if(type(self.category) == Pairwise):
-            outfile.write("N %d R %f %f\n\n" % (len(rvals), self.mind, self.maxd))
+            outfile.write("N %d R %f %f\n\n" % (len(rvals), self.mind * dist_conv, self.maxd * dist_conv))
         elif(type(self.category) == Bond or type(self.category) == Angle):
             outfile.write("N %d EQ %f\n\n" % (len(rvals), rvals[np.nonzero(potential == min(potential))[0][0]]))
         elif(type(self.category) == Dihedral):
@@ -298,6 +298,7 @@ class Force(object):
         
         #open
         if(type(outfile ) == type('')):
+
             outfile = open(outfile, 'w')
             
         #setup table

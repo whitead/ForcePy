@@ -467,7 +467,12 @@ class ForceMatch:
 
     def _save_plot(self):
         plt.tight_layout()
-        plt.savefig(self.plot_output)
+        #don't fail on saving the plot
+        try:
+            plt.savefig(self.plot_output)
+        except IOError:
+            print 'failed to save plot'
+            return
 
     def add_and_type_states(self, force, state_function, state_names):
         if(type(self.u) != CGUniverse):

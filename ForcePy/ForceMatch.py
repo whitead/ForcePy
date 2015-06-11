@@ -770,7 +770,7 @@ class ForceMatch:
             lammps_input_file = os.path.abspath(lammps_input_file)
 
         if(lammps_input_file_head is not None):
-            lammps_input_file_head = os.path.abspath(lammps_input_file)
+            lammps_input_file_head = os.path.abspath(lammps_input_file_head)
 
 
         if(not os.path.exists(folder)):
@@ -827,3 +827,6 @@ class ForceMatch:
         
         #now go back to original directory
         os.chdir(original_dir)
+
+        #return the name of the input file we just created
+        return "%s_fm.inp" % prefix

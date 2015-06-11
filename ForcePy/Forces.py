@@ -169,7 +169,7 @@ class Force(object):
 
     def plot(self, force_ax, potential_ax = None, true_force = None, true_potential = None):
         #make a mesh finer than the mesh used for finding paramers
-        self.plot_x = np.arange( self.mind, self.maxd, (self.maxd - self.mind) / 100. )
+        self.plot_x = np.arange( self.mind, self.maxd, (self.maxd - self.mind) / 1000. )
         self.plot_force = np.empty( len(self.plot_x) )
 
         self.true_force = true_force

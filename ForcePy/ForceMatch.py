@@ -425,12 +425,14 @@ class ForceMatch:
         for f in self.tar_forces:
             f.teardown_plot()
 
-    def _setup_plot(self):
+    def _setup_plot(self, plot_fig=None):
 
         if(not plotting_support):
             raise plotting_error
 
-        plot_fig = plt.figure()
+        if(plot_fig is None):
+            plot_fig = plt.figure()
+            
 
         #try to maximize the window
         mng = plt.get_current_fig_manager()

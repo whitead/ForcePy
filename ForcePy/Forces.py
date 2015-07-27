@@ -864,12 +864,12 @@ class SpectralForce(Force):
         return self.temp_force
 
     def fill_with_repulsion(self, end_at=None, height=None, power=12):
-        self.do_repulsion_fill = lambda x: SpectralForce._do_fill_with_repulsion(x, end_at, height, power)
+        self.do_repulsion_fill = (end_at, height, power) 
 
     def finalize_hook(self, u):
         super(SpectralForce, self).finalize_hook(u)
         if(self.do_repulsion_fill is not None):
-            self.do_repulsion_fill(self)
+            self._do_fill_with_repulsion(*self.do_repulsion_fill)
 
     def _do_fill_with_repulsion(self, end_at=None, height=None, power=12):
         '''

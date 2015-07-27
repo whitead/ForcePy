@@ -79,7 +79,7 @@ cdef class NeighborList(object):
             for yi in range(self.cell_number[1]):
                 for zi in range(self.cell_number[2]):
                     #get neighbors
-                    index = (xi * self.cell_number[0] + yi) * self.cell_number[1] + zi
+                    index = (xi * self.cell_number[1] + yi) * self.cell_number[2] + zi
                     index_vector = [xi, yi, zi]
                     neighs = [[] for x in range(3)]
                     for i in range(3):
@@ -89,12 +89,10 @@ cdef class NeighborList(object):
                     for xd in neighs[0]:
                         for yd in neighs[1]:
                             for zd in neighs[2]:
-                                neighbor = xd * self.cell_number[0] ** 2 + \
-                                                                       yd * self.cell_number[1]  + \
-                                                                       zd
+                                neighbor = (xd * self.cell_number[1] + yd) * self.cell_number[2] + zd
                                 #check if neighbor is already in cell_neighbor
                                 #this is possible if wrapped and cell number is 1
-                                if(not neighbor in self.cell_neighbors[index]): 
+                                if(not neighbor in self.cell_neighbors[index]):
                                     self.cell_neighbors[index].append(neighbor)
                         
     def __del__(self):
@@ -154,6 +152,7 @@ cdef class NeighborList(object):
         #bin the particles        
         self.bin_particles(u)
 
+
         ntime = time.time()
         positions = u.atoms.get_positions(copy=False)
 
@@ -170,8 +169,10 @@ cdef class NeighborList(object):
             for j in range(3):
                 #sometimes things are unwrapped, better to assume they aren't
                 k = positions[i][j]/ self.box[j] * self.cell_number[j]
-                k = floor(k % self.cell_number[j])      
-                icell =  int(k) + icell * self.cell_number[j]
+                k = floor(k % self.cell_number[j])
+                icell =  int(k) + icell * self.cell_number[j]                
+            if(icell > 210):
+                exit(210)
             for ncell in self.cell_neighbors[icell]:
                 j = self.head[ncell]
                 while(j != - 1):
@@ -182,9 +183,8 @@ cdef class NeighborList(object):
                         self.nlist_lengths[i] += 1
                         nlist_count += 1
                     j = self.cells[j]
-
         return nlist_count
 
-    def build_nlist(self, u):        
+    def build_nlist(self, u):
         return self.nlist[:self._build_nlist(u)], self.nlist_lengths
 

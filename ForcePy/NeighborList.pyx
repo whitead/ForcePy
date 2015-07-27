@@ -103,7 +103,7 @@ cdef class NeighborList(object):
         free(self.head)
         free(self.cells)
 
-    @cython.boundscheck(False) #turn off bounds checking
+#    @cython.boundscheck(False) #turn off bounds checking
     cdef bin_particles(self, u):
         cdef int i,j,icell
         cdef double k
@@ -121,6 +121,7 @@ cdef class NeighborList(object):
                 k = floor(k % self.cell_number[j])      
                 icell =  <int> k + icell * self.cell_number[2 - j]
             #push what is on the head into the cells
+            print icell
             self.cells[i] = self.head[icell]
             #add current value
             self.head[icell] = i            
@@ -144,15 +145,18 @@ cdef class NeighborList(object):
                 for b in range(len(temp_list[a])):
                     self.exclusion_list[a].append(b)
 
-    @cython.boundscheck(False) #turn off bounds checking
+#    @cython.boundscheck(False) #turn off bounds checking
     @cython.wraparound(False) #turn off negative indices
     cdef int _build_nlist(self, u):
 
         if(self.exclusion_list == None):
             self._build_exclusion_list(u)
 
+        print 'built'
         #bin the particles        
         self.bin_particles(u)
+
+        print 'binned'
 
         ntime = time.time()
         positions = u.atoms.get_positions(copy=False)
@@ -170,19 +174,25 @@ cdef class NeighborList(object):
             for j in range(3):
                 #sometimes things are unwrapped, better to assume they aren't
                 k = positions[i][j]/ self.box[j] * self.cell_number[j]
-                k = floor(k % self.cell_number[j])      
+                k = floor(k % self.cell_number[j])
+                print 2 - j
                 icell =  int(k) + icell * self.cell_number[2 - j]
+            print icell
             for ncell in self.cell_neighbors[icell]:
+                print self.cell_number_total
                 j = self.head[ncell]
+                print "nclel", ncell, j
                 while(j != - 1):
+                    print "i, j", i, j
                     if(i != j and
                        not (j in self.exclusion_list[i]) and
                         min_img_dist_sq(positions[i], positions[j], self.box, periodic) < self.cutoff ** 2):
                         self.nlist[nlist_count] = j
                         self.nlist_lengths[i] += 1
                         nlist_count += 1
+                    print "nlist count", nlist_count, i, j
                     j = self.cells[j]
-
+        print 'done'
         return nlist_count
 
     def build_nlist(self, u):        

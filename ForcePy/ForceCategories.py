@@ -98,7 +98,7 @@ class Pairwise(ForceCategory):
             Pairwise.instance = Pairwise(args[0])
         else:
             #check cutoff
-            if(Pairwise.instance.cutoff - args[0] > 0.00001):
+            if(Pairwise.instance.cutoff - args[0] < 0):
                 raise RuntimeError("Incompatible cutoffs: Already set to %g, not %g" % (Pairwise.instance.cutoff,args[0]))
         return Pairwise.instance
     

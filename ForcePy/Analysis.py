@@ -91,7 +91,10 @@ class RDF(Analysis):
         super(RDF, self).__init__(category, period, outfile, cutoff)
         self.hist = [0 for x in np.arange(0,cutoff, binsize)]
         self.binsize = binsize
-        self.cutoff = cutoff
+        try:
+            self.cutoff = self.category.cutoff
+        except AttributeError:
+            raise ValueError('Must pass cutoff for category type {}'.format(category))
 
     
     def do_update(self, u):
@@ -106,8 +109,18 @@ class RDF(Analysis):
             for r,d,j in self.category.generate_neighbor_vecs(i, u, maskj):
                 if(i < j):
                     b = int(floor(d / self.binsize))
-                    self.hist[b] += 1
+                    if(b < len(self.hist)):
+                        self.hist[b] += 1
 
+    def __getstate__(self):
+        odict = self.__dict__.copy()
+        #close and delete output file
+        if(type(self.outfile) == file):
+            self.outfile.close()
+            self.outfile = self.outfile.name
+        del odict['outfile']
+        return odict
+        
     def write(self):        
         
         if(type(self.outfile) != file):

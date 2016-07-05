@@ -314,7 +314,7 @@ class Force(object):
             outfile.write("%f %f %f\n" % (dist_conv * rvals[i], energy_conv * potential[i], force_conv * force[i]))
         
                       
-    def write_table(self, outfile, force_conv=1., energy_conv=1., dist_conv=1., points=10000):
+    def write_table(self, outfile, force_conv=1., energy_conv=1., dist_conv=1., points=10000):#writes B_B file
         outfile.write('#%s\n\n' % self.name)
         rvals = np.arange( self.mind, self.maxd, (self.maxd - self.mind) / float(points))
         force = np.empty( len(rvals) )
@@ -455,7 +455,6 @@ class AnalyticForce(Force):
     of length n.
     
     """
-
 
     def __init__(self, category, f, g, n, cutoff=None, potential = None):        
         super(AnalyticForce, self).__init__()

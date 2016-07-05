@@ -1,4 +1,5 @@
-from ForcePy.ForceCategories import Pairwise, Bond, Angle, Dihedral
+from ForcePy.ForceCategories import Pairwise, Angle, Dihedral
+from ForcePy.ForceCategories import Bond
 from ForcePy.States import State_Mask
 from MDAnalysis import Universe
 import numpy as np
@@ -136,7 +137,9 @@ class RDF(Analysis):
                            self.hist):
             r = 0.5 * (rl + rr)
             gr = (3 * h / (density * 4 * pi * (rr**3 - rl**3)))
-            self.outfile.write('{:10} {:10}\n'.format(r, gr))
+            self.outfile.write('{:>10} {:10} {:10}\n'.format(r, gr, h))
+        
+        
 
         
 class CoordNumber(Analysis):

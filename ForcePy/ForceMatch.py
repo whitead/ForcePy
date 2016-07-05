@@ -16,6 +16,9 @@ from ForcePy.Util import *
 from ForcePy.ForceCategories import *
 from ForcePy.Analysis import *
 from ForcePy.CGMap import CGUniverse, apply_mass_map, create_mass_map, write_lammps_data
+from ForcePy.WeightFactor import * #WIP
+
+
 try:
     from mpi4py import MPI
     mpi_support = True
@@ -34,6 +37,7 @@ class ForceMatch:
         self.ref_forces =  []
         self.analysis = []
         self.tar_forces = []
+        self.wgt_factor = None #WIP
         self.u = cguniverse
         if(input_json):
             self._load_json(input_json) 
@@ -66,6 +70,7 @@ class ForceMatch:
                 raise IOError("Error in input file, could not find %s\n. Set using %s keyword" % (rk[1], rk[0]))
 
     def __getstate__(self):
+
         odict = self.__dict__.copy()
         #remove universe, we don't want to serialize all that
         del odict['u']
@@ -120,10 +125,17 @@ class ForceMatch:
                 self.ref_cats.append(cat)
             a.setup_hook(self.u)
 
+    #WIP
+    def add_weight(self, neighbor_dist = True):
+        '''adds a function which can take an index and return a weighting based on certain factors'''
+       # print 'WEIGHT ADDED'
+        self.wgt_factor = WeightFactor(use_neighbor_dist = neighbor_dist) #creates a weight object that knows what factors to use... not very flexible but simple.
+        
+            
 
 
     def output_energies_mpi(self, outfile):
-        '''This is for assesing the energy coming out of the force-matching
+        '''This is for assessing the energy coming out of the force-matching
         '''
         
         comm = MPI.COMM_WORLD
@@ -244,12 +256,14 @@ class ForceMatch:
         if(self.plot_frequency != -1):
             self._setup_plot()
 
+        
+
  
         for ts in self.u.trajectory:
             
             #set box if necessary
             if("box" in self.json):
-                #strange ordering due to charm in previous MDAnalysis versions was 0,2,5
+                #strange ordering due to charm in previous MDAnalysis versions was 0,2,5 (using v.10 now)
                 self.u.trajectory.ts.dimensions = self.json["box"] + [90, 90 ,90]
 
             self._setup()
@@ -267,12 +281,20 @@ class ForceMatch:
 
             #sample particles and run updates on them 
             for i in random.sample(range(self.u.atoms.numberOfAtoms()),self.u.atoms.numberOfAtoms()):
-
+                #what is this random.sample accomplishing better than simply using all of the Atoms once?
+                #i can recover its position reasonably.
+                
+                #how do i get its neighbor??
                 #calculate net forces deviation
+               
                 df = np.array(ref_forces[i], dtype=np.float32)
                 mag_temp = ln.norm(df)
                 for f in self.tar_forces:
-                    df -= f.calc_particle_force(i,self.u)                    
+                    #WIP ustilize weighting here
+                    #how do I access the neighbor particle from here... or atleast this particles "real index"
+                    weight = self.wgt_factor.calc_weight(i, self.u)#1 here as a temp value... will need to be changed to a bug index
+                    df -= f.calc_particle_force(i, self.u)
+                    df *= weight
                 net_df +=  ln.norm(df) / mag_temp
 
                 #now run gradient update step on all the force types
@@ -282,7 +304,7 @@ class ForceMatch:
 
             ref_forces.fill(0)
             self._teardown()
-
+        
             print "avg relative magnitude error at %d  = %g" % (iterations, net_df / self.u.atoms.numberOfAtoms())
             
             iterations -= 1
@@ -301,7 +323,6 @@ class ForceMatch:
            is important when convergence is oscillatory or observation
            matching is being used. Some forces also do things at the
            end like fill in unobserved points with repulsion
-
         '''        
         for f in self.tar_forces:
             f.finalize_hook(self)
@@ -458,7 +479,7 @@ class ForceMatch:
         if(self.plot_output is None):
             plt.show()
             plt.ioff()
-
+            
         
                 
 

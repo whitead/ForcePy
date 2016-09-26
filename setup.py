@@ -9,9 +9,6 @@ For a basic installation just type the command::
 
 This script was adapted from MDAnalysis setup.py by Naveen Michaud-Agrawal.
 """
-
-from ez_setup import use_setuptools
-use_setuptools()
 from setuptools import setup, Extension
 from distutils.ccompiler import new_compiler
 #

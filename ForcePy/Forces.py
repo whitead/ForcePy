@@ -1,8 +1,8 @@
-from ForcePy.ForceCategories import Pairwise, Bond, Angle, Dihedral
-from ForcePy.Mesh import UniformMesh 
-from ForcePy.Util import norm3, spec_force_inner_loop, min_img_vec
-from ForcePy.States import State_Mask
-from ForcePy.Basis import UnitStep
+from ForceCategories import Pairwise, Bond, Angle, Dihedral
+from Mesh import UniformMesh 
+from Util import norm3, spec_force_inner_loop, min_img_vec
+from States import State_Mask
+from Basis import UnitStep
 
 import numpy as np
 import random

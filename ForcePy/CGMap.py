@@ -1,14 +1,14 @@
 from MDAnalysis import Writer
 from MDAnalysis.core.AtomGroup import Universe, AtomGroup, Atom, Residue, Segment
-from MDAnalysis.topology.core import Bond
-from MDAnalysis.core.units import get_conversion_factor
+from MDAnalysis.core.topologyobjects import Bond
+from MDAnalysis.units import get_conversion_factor
 import MDAnalysis.coordinates.base as base
 import numpy as np
 import scipy.sparse as npsp
-from ForcePy.ForceMatch import same_img
-from ForcePy.States import State_Mask
+from ForceMatch import same_img
+from States import State_Mask
 import os
-import ForcePy.ForceCategories as ForceCategories
+import ForceCategories as ForceCategories
 
 try:
     from mpi4py import MPI
@@ -61,7 +61,6 @@ class CGUniverse(Universe):
         self.selections = selections
         self.names = names
         self.chydrogens = collapse_hydrogens
-        self.universe = self
         self.residue_reduction_map = residue_reduction_map
 
         if(lammps_force_dump):
@@ -89,8 +88,11 @@ class CGUniverse(Universe):
         self._build_structure()
         
         print('Topology mapping by center of mass, forces by sum')
-        print('This is %s a periodic trajectory. %d Frames' % ('' if self.trajectory.periodic else 'not', self.trajectory.numframes))
+        print('This is %s a periodic trajectory. %d Frames' % ('' if self.trajectory.periodic else 'not', len(self.trajectory)))
 
+    @property
+    def universe(self):
+        return self
 
 
     def _build_structure(self):
@@ -118,7 +120,7 @@ class CGUniverse(Universe):
         for r in ref_residues:
             residue_atoms = []
             for s,n in zip(self.selections, self.names):
-                group = r.selectAtoms(s)
+                group = r.select_atoms(s)
 
                 #check if there were any selected atoms
                 if(len(group) == 0):
@@ -129,11 +131,11 @@ class CGUniverse(Universe):
                 #calculate the total mass lumped into the new CG atom
                 total_mass = sum([x.mass if x in group else 0 for x in r])
                 if(sum([1 if x in group else 0 for x in r]) > 0 and total_mass == 0):                    
-                    raise ValueError('Zero mass CG particle found! Please check all-atom masses and/or set them manually via \"fine_grain_universe.selectAtoms(...).set_mass(...)\"')
+                    raise ValueError('Zero mass CG particle found! Please check all-atom masses and/or set them manually via \"fine_grain_universe.select_atoms(...).set_mass(...)\"')
                 #make new atom, using total mass as mass
                 #masses are corrected after hydrogens are collapsed in
                 #and the fg to cg maps are defined 
-                a = Atom(index, n, n, r.name, r.id, r.atoms[0].segid, total_mass, 0) 
+                a = Atom(index, n, n, r.resname, r.resid, r.atoms[0].segid, total_mass, 0, universe=self) 
                 
                 index += 1
 
@@ -147,16 +149,16 @@ class CGUniverse(Universe):
                 #add the atom to Universe
                 self.atoms += a
             #now actually create new residue and give atoms a reference to it
-            residues[r.id] = Residue(r.name, r.id, residue_atoms, resnum=r.resnum)
+            residues[r.resid] = Residue(r.resname, r.resid, residue_atoms, resnum=r.resnum)
             for a in residue_atoms:
-                a.residue = residues[r.id]
+                a.residue = residues[r.resid]
 
             #take care of putting residue into segment
             segid = None if len(residue_atoms) == 0 else residue_atoms[0].segid
             if(segid in segments):
-                segments[segid].append(residues[r.id])
+                segments[segid].append(residues[r.resid])
             elif(segid):
-                segments[segid] = [residues[r.id]]
+                segments[segid] = [residues[r.resid]]
 
 
         #check to make sure we selected something
@@ -186,18 +188,18 @@ class CGUniverse(Universe):
 
         #generate matrix mappings for center of mass and sum of forces
         # A row is a mass normalized cg site defition. or unormalized 1s for forces
-        self.pos_map = npsp.lil_matrix( (self.atoms.numberOfAtoms(), self.fgref_u.atoms.numberOfAtoms()) , dtype=np.float32)
-        self.force_map = npsp.lil_matrix( (self.atoms.numberOfAtoms(), self.fgref_u.atoms.numberOfAtoms()) , dtype=np.float32)
+        self.pos_map = npsp.lil_matrix( (len(self.atoms), len(self.fgref_u.atoms)) , dtype=np.float32)
+        self.force_map = npsp.lil_matrix( (len(self.atoms), len(self.fgref_u.atoms)) , dtype=np.float32)
 
         #keep a forward map for use in state-masks
         #The key is a CG atom number and the value is an atom group of the fine-grain atoms
-        self.cgtofg_fiber_map = [[] for x in range(self.atoms.numberOfAtoms())]
+        self.cgtofg_fiber_map = [[] for x in range(len(self.atoms))]
 
         for a in self.fgref_u.atoms:
             try:
-                self.pos_map[fgtocg_incl_map[a].number, a.number] = a.mass / fgtocg_incl_map[a].mass
-                self.force_map[fgtocg_incl_map[a].number, a.number] = 1.
-                self.cgtofg_fiber_map[fgtocg_incl_map[a].number] += [a.number]
+                self.pos_map[fgtocg_incl_map[a].index, a.index] = a.mass / fgtocg_incl_map[a].mass
+                self.force_map[fgtocg_incl_map[a].index, a.index] = 1.
+                self.cgtofg_fiber_map[fgtocg_incl_map[a].index] += [a.index]
             except KeyError:
                 #was not selected
                 pass
@@ -207,11 +209,11 @@ class CGUniverse(Universe):
         #see Noid et al 2008 (MS-CG I), M_I = (\sum_i c_Ii^2 / m_i)^-1 for nonzero c_Ii
         #c_Ii = fg atom mass / cg atom total mass for all fg atoms included
         #in the definition of cg atom I
-        for cg_idx in range(self.atoms.numberOfAtoms()):
+        for cg_idx in range(len(self.atoms)):
             new_mass = 1.0 / sum([(self.fgref_u.atoms[fg_idx].mass / self.atoms[cg_idx].mass ** 2) for fg_idx in self.cgtofg_fiber_map[cg_idx]])
             self.atoms[cg_idx].mass = new_mass
 
-        for i in range(self.atoms.numberOfAtoms()):
+        for i in range(len(self.atoms)):
             #convert the list of atom indices into an AtomGroup object
             #it has to be wraped so we can manipulate it later
             self.cgtofg_fiber_map[i] = AtomGroupWrapper(reduce(lambda x,y: x + y, [self.fgref_u.atoms[x] for x in self.cgtofg_fiber_map[i]]))
@@ -222,24 +224,28 @@ class CGUniverse(Universe):
                                     
         #add bonds using the reverse map
         #There is new syntax in 0.92 that uses topolgy groups instead of lists.
-        #delete using attribute 
-        del self.bonds
+        #delete by removing
+        for b in self.bonds:
+            self.bonds -= b
+
         for b in self.fgref_u.bonds:
             try:
                 cgatom1 = fgtocg_incl_map[b[0]]
                 cgatom2 = fgtocg_incl_map[b[1]]
+                exists = False
                 for cbg in self.bonds:
-                    if(not (cbg[0] in [cgatom1, cgatom2]) and not( cbg[1] in [cgatom1, cgatom2])):
-                    #OK, no bond exists yet
-                        self.bonds += Bond( (cgatom1, cgatom2) )
+                    if(cbg[0] in [cgatom1, cgatom2] and cbg[1] in [cgatom1, cgatom2]):
+                        exists = True
+                        break
+                if not exists and cgatom1 != cgatom2:
+                    self.bonds += Bond( (cgatom1, cgatom2) )
+                    
             except KeyError:
                 #was not in selection
                 pass
 
         self.__trajectory = CGReader(self, self.fgref_u.trajectory, self.pos_map, self.force_map, self.lfdump, self.lfdump_map)
-        for a in self.atoms:
-            a.universe = self
-
+        
         #take care of segments now
         segment_groups = {}
         for k,v in segments.iteritems():
@@ -330,9 +336,17 @@ class CGReader(base.Reader):
 
         self.units = aatraj.units
         self.numatoms = np.shape( pos_map )[0] #The topology matrix mapping should have a number of rows equal to cg atoms
-        self.periodic = aatraj.periodic
-        self.numframes = aatraj.numframes
-        self.skip  = aatraj.skip
+        try:
+            self.periodic = aatraj.periodic
+        except AttributeError:
+            self.periodic = False
+            
+        self.__len__ = len(aatraj)
+        self.n_frames = len(aatraj)
+        try:
+            self.skip_timestep  = aatraj.skip_timestep
+        except AttributeError:
+            self.skip_timestep = 0
         self.ts = Timestep(self.numatoms)
         self.ts.set_ref_traj(aatraj)
         self.ts.dimensions = aatraj.ts.dimensions
@@ -349,7 +363,7 @@ class CGReader(base.Reader):
     
     def __iter__(self):
         def iterCG():
-            for i in range(0, self.numframes, self.skip):
+            for i in range(0, len(self), self.skip):
                 try: yield self._read_next_timestep()
                 except IOError: raise StopIteration
         return iterCG()
@@ -363,7 +377,7 @@ class CGReader(base.Reader):
 
         #now, we must painstakingly and annoyingly put each cg group into the same periodic image
         #as its residue 
-        if(self.aatraj.periodic):
+        if(self.periodic):
             dims = ts.dimensions
             for r in self.u.fgref_u.residues:
                 centering_vector = np.copy(r.atoms[0].pos)
@@ -491,7 +505,7 @@ def write_lammps_data(universe, filename, atom_type=None, bonds=True, angles=Fal
 
         
     for i,a in zip(range(len(universe.atoms)), universe.atoms):
-        assert i == a.number, 'Atom indices are jumbled. Atom %d has number %d' % (i, a.number)
+        assert i == a.index, 'Atom indices are jumbled. Atom %d has number %d' % (i, a.index)
 
         if(not a.type in type_map):
             type_map[a.type] = atom_types
@@ -546,7 +560,7 @@ def write_lammps_data(universe, filename, atom_type=None, bonds=True, angles=Fal
   
             if(btype is not None):
                 bond_section.append('%d %d %d %d\n' % (bindex, btype,
-                                                   b.atom1.number+1, b.atom2.number+1))
+                                                   b.atom1.index+1, b.atom2.index+1))
                 bindex += 1
     aindex = 1
     if(angles):
@@ -563,7 +577,7 @@ def write_lammps_data(universe, filename, atom_type=None, bonds=True, angles=Fal
                 atypes[atype] = len(atypes)
             
             angle_section.append('%d %d %d %d %d\n' % (aindex, atypes[atype],
-                                                       a[0].number+1, a[1].number+1, a[2].number+1))
+                                                       a[0].index+1, a[1].index+1, a[2].index+1))
             aindex += 1
 
     dindex =1 
@@ -581,7 +595,7 @@ def write_lammps_data(universe, filename, atom_type=None, bonds=True, angles=Fal
                 dtypes[dtype] = len(dtypes)
             
             dihedral_section.append('%d %d %d %d %d %d\n' % (dindex, dtypes[dtype],
-                                                       d[0].number+1, d[1].number+1, d[2].number+1, d[3].number+1))
+                                                       d[0].index+1, d[1].index+1, d[2].index+1, d[3].index+1))
             dindex += 1
             
             
@@ -633,7 +647,7 @@ def write_lammps_data(universe, filename, atom_type=None, bonds=True, angles=Fal
 def write_trajectory(universe, filename, maximum_frames=0):
     '''A simplified method for writing trajectories
     '''
-    w = Writer(filename, universe.atoms.numberOfAtoms())
+    w = Writer(filename, len(universe.atoms))
     frame_count = 0
     for ts in universe.trajectory:
         if(maximum_frames != 0 and frame_count == maximum_frames):
@@ -656,7 +670,7 @@ def apply_mass_map(universe, mass_map):
     '''Apply a mass_map created by a call to `create_mass_map`
     '''
     for k,v in mass_map.iteritems():
-        universe.selectAtoms('type {}'.format(k)).set_mass(v)
+        universe.select_atoms('type {}'.format(k)).set_mass(v)
 
 
 def add_residue_bonds(universe, selection1, selection2):
@@ -665,8 +679,8 @@ def add_residue_bonds(universe, selection1, selection2):
     '''
     count = 0 
     for r in universe.atoms.residues:        
-        group1 = r.selectAtoms(selection1)
-        group2 = r.selectAtoms(selection2)            
+        group1 = r.select_atoms(selection1)
+        group2 = r.select_atoms(selection2)            
         for a1 in group1:
             for a2 in group2:
                 if(a1 != a2):
@@ -702,14 +716,14 @@ def add_sequential_bonds(universe, selection1=None, selection2=None):
             if(last is not None):
                 if(selection1):
                     try:
-                        universe.bonds.append( Bond(r.selectAtoms(selection1)[0], last) )
+                        universe.bonds.append( Bond(r.select_atoms(selection1)[0], last) )
                     except IndexError:
                         raise ValueError('Could not find {} in {}'.format(selection1, r))
                 else:
                     universe.bonds.append( Bond(r.atoms[0], last) )
                 count += 1
             if(selection2):
-                last = r.atoms.selectAtoms(selection2)[-1]
+                last = r.atoms.select_atoms(selection2)[-1]
             else:
                 last = r.atoms[-1]
 

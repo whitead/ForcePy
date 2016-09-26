@@ -4,7 +4,7 @@ import numpy.linalg as ln
 from math import ceil
 from MDAnalysis import Universe
 from math import *
-import ForcePy.ForceCategories as ForceCategories
+import ForceCategories as ForceCategories
 try:
     import matplotlib.pyplot as plt
     plotting_support = True
@@ -190,7 +190,7 @@ class ForceMatch:
         if(do_plots and rank == 0):
             self._setup_plot()
 
-        frame_number = frame_number if frame_number > 0 else self.u.trajectory.numframes
+        frame_number = frame_number if frame_number > 0 else len(self.u.trajectory)
 
 
         if(batch_size):
@@ -235,9 +235,9 @@ class ForceMatch:
 
 
         if(iterations == 0):
-            iterations = self.u.trajectory.numframes
+            iterations = len(self.u.trajectory)
         
-        ref_forces = np.zeros( (self.u.atoms.numberOfAtoms(), 3) )
+        ref_forces = np.zeros( (len(self.u.atoms), 3) )
         self.u.trajectory.rewind() # just in case this is called after some analysis has been done
         
         #setup plots
@@ -266,7 +266,7 @@ class ForceMatch:
             self.force_match_calls += 1
 
             #sample particles and run updates on them 
-            for i in random.sample(range(self.u.atoms.numberOfAtoms()),self.u.atoms.numberOfAtoms()):
+            for i in random.sample(range(len(self.u.atoms)),len(self.u.atoms)):
 
                 #calculate net forces deviation
                 df = np.array(ref_forces[i], dtype=np.float32)
@@ -283,7 +283,7 @@ class ForceMatch:
             ref_forces.fill(0)
             self._teardown()
 
-            print "avg relative magnitude error at %d  = %g" % (iterations, net_df / self.u.atoms.numberOfAtoms())
+            print "avg relative magnitude error at %d  = %g" % (iterations, net_df / len(self.u.atoms))
             
             iterations -= 1
             if(iterations == 0):
@@ -307,7 +307,7 @@ class ForceMatch:
             f.finalize_hook(self)
 
     def _force_match_task(self, start, end, do_print = False):
-        ref_forces = np.zeros( (self.u.atoms.numberOfAtoms(), 3) )
+        ref_forces = np.zeros( (len(self.u.atoms), 3) )
 
         
         self.u.trajectory.rewind()
@@ -332,7 +332,7 @@ class ForceMatch:
             self.force_match_calls += 1
 
             #sample particles and run updates on them 
-            for i in random.sample(range(self.u.atoms.numberOfAtoms()),self.u.atoms.numberOfAtoms()):
+            for i in random.sample(range(len(self.u.atoms)),len(self.u.atoms)):
                 #calculate net forces deviation
                 df = np.array(ref_forces[i], dtype=np.float32)
                 mag_temp = ln.norm(df)
@@ -348,7 +348,7 @@ class ForceMatch:
             self._teardown()
 
             if(do_print):
-                print "avg relative magnitude error  = %g" % (net_df / self.u.atoms.numberOfAtoms())
+                print "avg relative magnitude error  = %g" % (net_df / len(self.u.atoms))
                 
 
             if(tsi != end - 1):
@@ -403,7 +403,7 @@ class ForceMatch:
         size = comm.Get_size()
         rank = comm.Get_rank()
 
-        frame_number = frame_number if frame_number > 0 else self.u.trajectory.numframes
+        frame_number = frame_number if frame_number > 0 else len(self.u.trajectory)
         span = frame_number / size
         
         #get remainder
@@ -504,7 +504,7 @@ class ForceMatch:
 
     def _sample_ts(self):
         self.u.trajectory.rewind()
-        index = random.randint(0,self.u.trajectory.numframes - 1)
+        index = random.randint(0,len(self.u.trajectory) - 1)
         [self.u.trajectory.next() for x in range(index)]
         return index
                    

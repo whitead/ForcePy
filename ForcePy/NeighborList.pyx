@@ -171,8 +171,6 @@ cdef class NeighborList(object):
                 k = positions[i][j]/ self.box[j] * self.cell_number[j]
                 k = floor(k % self.cell_number[j])
                 icell =  int(k) + icell * self.cell_number[j]                
-            if(icell > 210):
-                exit(210)
             for ncell in self.cell_neighbors[icell]:
                 j = self.head[ncell]
                 while(j != - 1):

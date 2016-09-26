@@ -1,5 +1,5 @@
-from ForcePy.ForceCategories import Pairwise, Bond, Angle, Dihedral
-from ForcePy.States import State_Mask
+from ForceCategories import Pairwise, Bond, Angle, Dihedral
+from States import State_Mask
 from MDAnalysis import Universe
 import numpy as np
 from math import floor, pi

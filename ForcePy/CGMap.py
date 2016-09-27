@@ -5,6 +5,7 @@ from MDAnalysis.units import get_conversion_factor
 import MDAnalysis.coordinates.base as base
 import numpy as np
 import scipy.sparse as npsp
+from scipy.stats import mode
 from ForceMatch import same_img
 from States import State_Mask
 import os
@@ -43,7 +44,7 @@ class CGUniverse(Universe):
         universe residue indices.
     '''
 
-    def __init__(self, otherUniverse, selections, names = None, collapse_hydrogens = False, lammps_force_dump = None, residue_reduction_map = None):
+    def __init__(self, otherUniverse, selections = None, names = None, collapse_hydrogens = False, lammps_force_dump = None, residue_reduction_map = None):
         #this line of code here should work,
         super(Universe, self).__init__()
         #but I don't know why it doesn't. So instead I also do this:
@@ -52,16 +53,8 @@ class CGUniverse(Universe):
         self.atoms = AtomGroup([])
 
 
-        if(names is None):
-            names = [ '%dX' % x for x in range(len(selections))]
-        if(len(names) != len(selections)):
-            raise ValueError('Length of slections (%d) must match lenght of names (%d)' % (len(selections), len(names)))
         self.fgref_u = otherUniverse
         self.atoms = AtomGroup([])
-        self.selections = selections
-        self.names = names
-        self.chydrogens = collapse_hydrogens
-        self.residue_reduction_map = residue_reduction_map
 
         if(lammps_force_dump):
             self.lfdump = open(lammps_force_dump, 'r')
@@ -84,42 +77,55 @@ class CGUniverse(Universe):
             self.lfdump = None
             self.lfdump_map = None
 
-
-        self._build_structure()
-        
-        print('Topology mapping by center of mass, forces by sum')
-        print('This is %s a periodic trajectory. %d Frames' % ('' if self.trajectory.periodic else 'not', len(self.trajectory)))
+        if selections is not None:
+            self.map_to_selection(selections, names, collapse_hydrogens, residue_reduction_map)
+            self._build_cg_maps()        
 
     @property
     def universe(self):
         return self
 
 
-    def _build_structure(self):
+    def map_to_selection(self, selections, names = None, collapse_hydrogens = False, residue_reduction_map = None):
+        '''Coarse-grain using the given per-residue selections'''
+        if(names is None):
+            names = [ '%dX' % x for x in range(len(selections))]
+        if(len(names) != len(selections)):
+            raise ValueError('Length of slections (%d) must match lenght of names (%d)' % (len(selections), len(names)))
+        
+        self._cg_from_selections(selections, names, collapse_hydrogens, residue_reduction_map)
+        self._build_cg_maps()
+
+    def map_to_matrix(self, matrix):
+        '''Coarse-grain using the given matrix which has dimension number of CG particles by number of atoms. 1/0 indicate if a particular atom maps to a CG particle'''
+        self._cg_from_matrix(matrix)
+        self._build_cg_maps()
+        
+    
+    def _cg_from_selections(self, selections, names, collapse_hydrogens, residue_reduction_map):
         #atoms cannot be written out of index order, so we 
         #need to iterate residue by residue
         index = 0
-        fgtocg_incl_map = {} #keys = fine atoms, values = coarse beads
+        self.fgtocg_incl_map = {} #keys = fine atoms, values = coarse beads
         residues = {}
         #keep track of selections, so we can throw a useful error if we don't end up selecting anything
         selection_count = {}
         segments = {}
-        for s in self.selections:
+        for s in selections:
             selection_count[s] = 0
 
         #if we're reducing the residues, we'll need to take care of that
         ref_residues = self.fgref_u.residues
-        if(self.residue_reduction_map):
+        if(residue_reduction_map):
             #reduce them
             ref_residues = []
-            for i,ri in enumerate(self.residue_reduction_map):
+            for i,ri in enumerate(residue_reduction_map):
                 ref_residues.append(Residue(name='CMB', id=i+1, 
                                             atoms=reduce(lambda x,y: x+y, [self.fgref_u.residues[j] for j in ri]),
                                             resnum=i+1))
-        total_masses = []
         for r in ref_residues:
             residue_atoms = []
-            for s,n in zip(self.selections, self.names):
+            for s,n in zip(selections, names):
                 group = r.select_atoms(s)
 
                 #check if there were any selected atoms
@@ -140,9 +146,9 @@ class CGUniverse(Universe):
                 index += 1
 
                 for ra in group:
-                    if(ra in fgtocg_incl_map):
-                        raise ValueError('Attemtping to map {} to {} and {}'.format(ra, a, fgtocg_incl_map[ra]))
-                    fgtocg_incl_map[ra] = a
+                    if(ra in self.fgtocg_incl_map):
+                        raise ValueError('Attemtping to map {} to {} and {}'.format(ra, a, self.fgtocg_incl_map[ra]))
+                    self.fgtocg_incl_map[ra] = a
 
                 #append atom to new residue atom group
                 residue_atoms.append(a)
@@ -163,7 +169,7 @@ class CGUniverse(Universe):
 
         #check to make sure we selected something
         total_selected = 0
-        for s in self.selections:
+        for s in selections:
             count = selection_count[s]
             total_selected += count
             if(count == 0):
@@ -171,20 +177,104 @@ class CGUniverse(Universe):
 
         #check counting
         if(len(self.fgref_u.atoms) < total_selected):
-            print 'Warining: some atoms placed into more than 1 CG Site'
+            print('Warning: some atoms placed into more than 1 CG Site')
         elif(len(self.fgref_u.atoms) > total_selected):
-            print 'Warning: some atoms not placed into CG site'
+            print('Warning: some atoms not placed into CG site')
         
 
         #find hydrogens and collapse them into beads 
-        if(self.chydrogens):
+        if(collapse_hydrogens):
             for b in self.fgref_u.bonds:
                 #my hack for inferring a hydrogen
                 for a1,a2 in [(b[0], b[1]), (b[1], b[0])]:
                     if(a1.type.startswith('H') and a1.mass < 4.):
-                        fgtocg_incl_map[a1] = fgtocg_incl_map[a2]
+                        self.fgtocg_incl_map[a1] = self.fgtocg_incl_map[a2]
                         #add the mass
-                        fgtocg_incl_map[a2].mass += a1.mass        
+                        self.fgtocg_incl_map[a2].mass += a1.mass
+
+        #take care of segments now
+        segment_groups = {}
+        for k,v in segments.iteritems():
+            segment_groups[k] = Segment(k, v)
+        for a in self.atoms:
+            a.segment = segment_groups[a.segid]
+
+            
+
+    def _cg_from_matrix(self, matrix):
+        '''Perform corase-graining given a binary matrix of number of atoms x
+        number of cg particles dimension
+        '''
+        
+        try:
+            if(matrix.shape[1] != len(self.fgref_u.atoms)):
+                raise ValueError('Matrix should have as many columns as FG atoms')
+        except AttributeError:
+            raise ValueError('Matrix should be numpy array')
+
+        #Check that atoms aren't in multiple CG particles
+        colsums = np.apply_along_axis(np.count_nonzero, 0, matrix)
+        if not np.allclose(colsums, 1):
+            raise ValueError('Matrix columns should only have 1 nonzero')
+
+        cg_index = 0
+        self.fgtocg_incl_map = {}
+        segments = {}
+
+        #iterating over cg particles
+        for i in range(matrix.shape[0]):
+
+            fg_atoms = []
+            #treat indexing carefully since dtype could be wonky
+            for j in np.nonzero(matrix[i,:])[0]:
+                fg_atoms.append(self.fgref_u.atoms[j])
+                
+            #get mass
+            mass = sum([a.mass for a in fg_atoms])
+            #get charge
+            charge = sum([a.charge for a in fg_atoms])
+
+            #create an enclosing residue. Use mode for most of these values
+            #scipy stats mode returns a tuple of arrays, so annoying indexing
+            resname = mode([a.resname for a in fg_atoms])[0][0]
+            resid = mode([a.resid for a in fg_atoms])[0][0]
+            name = mode([a.name for a in fg_atoms])[0][0]
+            segid = mode([a.segid for a in fg_atoms])[0][0]
+
+            r = Residue(name=resname, id=resid, atoms=[])
+            a = Atom(index=cg_index, name='{}{}'.format(name,cg_index), type='CG', resname=r.resname,
+                     resid=r.resid, segid=segid, mass=mass, charge=charge, residue=r,
+                     universe=self)
+            cg_index += 1
+            #add a to the new residue
+            r += a
+
+            #keep track of fg to cg
+            for fg_a in fg_atoms:
+                self.fgtocg_incl_map[fg_a] = a
+            
+            #check if the segment exists
+            if(segid in segments):
+                segments[segid].append(r)
+            else:
+                segments[segid] = [r]                
+            
+            #add atom to universe
+            self.atoms += a
+
+        #take care of segments now
+        segment_groups = {}
+        for k,v in segments.iteritems():
+            segment_groups[k] = Segment(k, v)
+        for a in self.atoms:
+            a.segment = segment_groups[a.segid]
+
+            
+            
+        
+
+                        
+    def _build_cg_maps(self):
 
         #generate matrix mappings for center of mass and sum of forces
         # A row is a mass normalized cg site defition. or unormalized 1s for forces
@@ -197,9 +287,9 @@ class CGUniverse(Universe):
 
         for a in self.fgref_u.atoms:
             try:
-                self.pos_map[fgtocg_incl_map[a].index, a.index] = a.mass / fgtocg_incl_map[a].mass
-                self.force_map[fgtocg_incl_map[a].index, a.index] = 1.
-                self.cgtofg_fiber_map[fgtocg_incl_map[a].index] += [a.index]
+                self.pos_map[self.fgtocg_incl_map[a].index, a.index] = a.mass / self.fgtocg_incl_map[a].mass
+                self.force_map[self.fgtocg_incl_map[a].index, a.index] = 1.
+                self.cgtofg_fiber_map[self.fgtocg_incl_map[a].index] += [a.index]
             except KeyError:
                 #was not selected
                 pass
@@ -224,14 +314,13 @@ class CGUniverse(Universe):
                                     
         #add bonds using the reverse map
         #There is new syntax in 0.92 that uses topolgy groups instead of lists.
-        #delete by removing
-        for b in self.bonds:
-            self.bonds -= b
+        #delete bonds
+        del self.bonds
 
         for b in self.fgref_u.bonds:
             try:
-                cgatom1 = fgtocg_incl_map[b[0]]
-                cgatom2 = fgtocg_incl_map[b[1]]
+                cgatom1 = self.fgtocg_incl_map[b[0]]
+                cgatom2 = self.fgtocg_incl_map[b[1]]
                 exists = False
                 for cbg in self.bonds:
                     if(cbg[0] in [cgatom1, cgatom2] and cbg[1] in [cgatom1, cgatom2]):
@@ -244,22 +333,18 @@ class CGUniverse(Universe):
                 #was not in selection
                 pass
 
-        self.__trajectory = CGReader(self, self.fgref_u.trajectory, self.pos_map, self.force_map, self.lfdump, self.lfdump_map)
-        
-        #take care of segments now
-        segment_groups = {}
-        for k,v in segments.iteritems():
-            segment_groups[k] = Segment(k, v)
-        for a in self.atoms:
-            a.segment = segment_groups[a.segid]
-            
+        self._trajectory = CGReader(self, self.fgref_u.trajectory, self.pos_map, self.force_map, self.lfdump, self.lfdump_map)                    
         self.atoms._rebuild_caches()
+        print('This is %s a periodic trajectory. %d Frames' % ('' if self.trajectory.periodic else 'not', len(self.trajectory)))
+        
 
 
     
     @property
     def trajectory(self):
-        return self.__trajectory
+        if(self._trajectory is None):
+            raise AttributeError('You must call a map function before the CGUniverse is ready')
+        return self._trajectory
 
     def cache(self, directory='cg_cache', maximum_frames=0):
         '''This precomputes the trajectory and structure so that it doesn't need to be 

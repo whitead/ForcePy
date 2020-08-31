@@ -1,3 +1,7 @@
+## 2020 Update
+
+**This proejct is very dead. It has been superceded by better tools. For example, see our [latest work](https://github.com/ur-whitelab/hoomd-tf/)**
+
 Summary
 =======
 
@@ -7,9 +11,7 @@ Can be used independently for topology reduction in coarse-graining.
 
 ## License
 
-Copyright 2014
-
-This code is provided as a preview of an upcoming licensed and peer-reviewed/published version. It is currently unlicensed, meaning modification, distribution, sublicensing and commercial use are forbidden.
+MIT
 
 Example 1: Coarse-graining a Trajectory of Water
 ==========

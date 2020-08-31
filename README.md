@@ -1,6 +1,6 @@
 ## 2020 Update
 
-**This proejct is very dead. It has been superceded by better tools. For example, see our [latest work](https://github.com/ur-whitelab/hoomd-tf/)**
+**This proejct is very dead. It has been superseded by better tools. For example, see our [latest work](https://github.com/ur-whitelab/hoomd-tf/)**
 
 Summary
 =======
